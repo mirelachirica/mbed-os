@@ -82,7 +82,7 @@ public:
 			_data[i] = (uint8_t)rand();
 		}
 		// clear pending events
-		while ((EchoSocket::eventFlags.wait_any(_async_flag, SOCKET_TIMEOUT) & (osFlagsError | _async_flag)) == _async_flag);
+		TEST_ASSERT(!(EchoSocket::eventFlags.clear(_async_flag) & osFlagsError));
 		if (hostname) {
 			TEST_ASSERT(sendto(hostname, ECHO_SERVER_UDP_PORT, _data, _size) == _size);
 		} else {
@@ -171,6 +171,11 @@ static void udp_socket_send_receive_async()
     wait(1);
 }
 
+static void udp_network_disconnect()
+{
+    cellular_target_state = CellularConnectionFSM::STATE_DISCONNECTED;
+    TEST_ASSERT(cellular.continue_to_state(cellular_target_state) == NSAPI_ERROR_OK);
+}
 using namespace utest::v1;
 
 static utest::v1::status_t greentea_failure_handler(const Case *const source, const failure_t reason)
@@ -184,6 +189,7 @@ static Case cases[] = {
 	Case("UDP gethostbyname", udp_gethostbyname, greentea_failure_handler),
 	Case("UDP socket send/receive", udp_socket_send_receive, greentea_failure_handler),
 	Case("UDP socket send/receive async", udp_socket_send_receive_async, greentea_failure_handler),
+	Case("UDP network disconnect", udp_network_disconnect, greentea_failure_handler),
 	//Case("UDP socket multiple simultaneous", udp_socket_multiple_simultaneous, greentea_failure_handler),
 };
 

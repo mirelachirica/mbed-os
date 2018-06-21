@@ -461,9 +461,14 @@ ssize_t ATHandler::read(char *buf, size_t size, bool read_even_stop_tag, bool he
     }
 
     size_t match_pos = 0;
-    size_t read_size = hex ? size * 2 : size;
+    // Size includes NULL
+    size_t read_size = hex ? (size - 1) * 2 : (size - 1);
 
     consume_char('\"');
+
+    if (_last_err) {
+        return -1;
+    }
 
     size_t read_idx = 0;
     size_t buf_idx = 0;
@@ -471,7 +476,15 @@ ssize_t ATHandler::read(char *buf, size_t size, bool read_even_stop_tag, bool he
 
     for (; read_idx < (read_size + match_pos); read_idx++) {
         int c = get_char();
-        buf_idx = hex ? read_idx / 2 : read_idx;
+
+        if (!hex) {
+            buf_idx = read_idx;
+        } else if (!match_pos) {
+            buf_idx = read_idx / 2;
+        } else {
+            buf_idx++;
+        }
+
         if (c == -1) {
             buf[buf_idx] = '\0';
             set_error(NSAPI_ERROR_DEVICE_ERROR);
@@ -497,7 +510,7 @@ ssize_t ATHandler::read(char *buf, size_t size, bool read_even_stop_tag, bool he
             match_pos = 0;
         }
 
-        if (!hex) {
+        if (!hex || (hex && match_pos)) {
             buf[buf_idx] = c;
         } else {
             hexbuf[read_idx % 2] = c;
@@ -505,6 +518,11 @@ ssize_t ATHandler::read(char *buf, size_t size, bool read_even_stop_tag, bool he
                 hex_str_to_char_str(hexbuf, 2, buf + buf_idx);
             }
         }
+    }
+
+    if (read_idx && (read_idx == (read_size)) && buf[buf_idx] != '\0') {
+        buf_idx++;
+        buf[buf_idx] = '\0';
     }
 
     return buf_idx;

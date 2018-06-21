@@ -10,7 +10,7 @@ branch_cov=""
 branch_data="--no-branch-coverage"
 
 # Remember to add new test folder to Makefile
-make clean >/dev/null 2>&1
+# make clean >/dev/null 2>&1
 make all
 
 echo

@@ -789,25 +789,20 @@ void Test_ATHandler::test_ATHandler_read_int()
     filehandle_stub_table_pos = 0;
     mbed_poll_stub::revents_value = POLLIN;
     mbed_poll_stub::int_value = 1;
-
     at.resp_start();
-
     ret= at.read_int();
     CHECK(-1 == ret);
-    at.flush();
-    at.clear_error();
 
+    at.clear_error();
     char table2[] = "\"2,\"OK\r\n\0";
+    at.flush();
     filehandle_stub_table = table2;
     filehandle_stub_table_pos = 0;
     mbed_poll_stub::revents_value = POLLIN;
     mbed_poll_stub::int_value = 1;
-
     at.resp_start();
-
     ret= at.read_int();
     CHECK(2 == ret);
-
 }
 
 void Test_ATHandler::test_ATHandler_resp_start()
@@ -817,65 +812,105 @@ void Test_ATHandler::test_ATHandler_resp_start()
 
     filehandle_stub_table = NULL;
     filehandle_stub_table_pos = 0;
+    mbed_poll_stub::revents_value = POLLIN;
+    mbed_poll_stub::int_value = 1;
 
     ATHandler at(&fh1, que, 0, ",");
     at.resp_start();
     at.resp_start();
 
+    at.clear_error();
     char table2[] = "\"2,\"OK\r\n\0";
+    at.flush();
     filehandle_stub_table = table2;
     filehandle_stub_table_pos = 0;
+    mbed_poll_stub::revents_value = POLLIN;
+    mbed_poll_stub::int_value = 1;
 
-    at.flush();
-    at.clear_error();
     at.resp_start("ssssaaaassssaaaassss"); //too long prefix
 
+    at.clear_error();
     char table3[] = "+CME ERROR: 108\0";
+    at.flush();
     filehandle_stub_table = table3;
     filehandle_stub_table_pos = 0;
-
-    at.flush();
-    at.clear_error();
+    mbed_poll_stub::revents_value = POLLIN;
+    mbed_poll_stub::int_value = 1;
     at.resp_start();
+    CHECK(DeviceErrorTypeErrorCME == at.get_last_device_error().errType);
+    CHECK(108 == at.get_last_device_error().errCode);
 
     filehandle_stub_table_pos = 0;
-
+    mbed_poll_stub::revents_value = POLLIN;
+    mbed_poll_stub::int_value = 1;
     at.flush();
     at.clear_error();
     at.resp_start();
 
+    at.clear_error();
     char table4[] = "+CMS ERROR: 6\0";
+    at.flush();
     filehandle_stub_table = table4;
     filehandle_stub_table_pos = 0;
-
-    at.flush();
-    at.clear_error();
+    mbed_poll_stub::revents_value = POLLIN;
+    mbed_poll_stub::int_value = 1;
     at.resp_start();
+    CHECK(DeviceErrorTypeErrorCMS == at.get_last_device_error().errType);
+    CHECK(6 == at.get_last_device_error().errCode);
 
+    at.clear_error();
     char table5[] = "ERROR\r\n\0";
+    at.flush();
     filehandle_stub_table = table5;
     filehandle_stub_table_pos = 0;
-
-    at.flush();
-    at.clear_error();
+    mbed_poll_stub::revents_value = POLLIN;
+    mbed_poll_stub::int_value = 1;
     at.resp_start();
+    CHECK(NSAPI_ERROR_DEVICE_ERROR == at.get_last_error());
 
+    at.clear_error();
     char table6[] = "OK\r\n\0";
+    at.flush();
     filehandle_stub_table = table6;
     filehandle_stub_table_pos = 0;
-
-    at.flush();
-    at.clear_error();
+    mbed_poll_stub::revents_value = POLLIN;
+    mbed_poll_stub::int_value = 1;
     at.resp_start();
 
+    at.clear_error();
     char table7[] = "ssssss\0";
+    at.flush();
     filehandle_stub_table = table7;
     filehandle_stub_table_pos = 0;
-
-    at.flush();
-    at.clear_error();
+    mbed_poll_stub::revents_value = POLLIN;
+    mbed_poll_stub::int_value = 1;
     at.set_urc_handler("ss", NULL);
     at.resp_start();
+    at.remove_urc_handler("ss", NULL);
+
+    // ***  No prefix and CRLF  ***
+    at.clear_error();
+    char table8[] = "ssss\r\nttttt\r\nabc";
+    at.flush();
+    filehandle_stub_table = table8;
+    filehandle_stub_table_pos = 0;
+    mbed_poll_stub::revents_value = POLLIN;
+    mbed_poll_stub::int_value = 1;
+    at.resp_start();
+    uint8_t buf8[16];
+    // Return when CRLF and no other matches
+    at.read_bytes(buf8, 13);
+    CHECK(!memcmp(buf8, table8, 13));
+
+    at.flush();
+    filehandle_stub_table = table8;
+    filehandle_stub_table_pos = 0;
+    mbed_poll_stub::revents_value = POLLIN;
+    mbed_poll_stub::int_value = 1;
+    at.resp_start("ttttt");
+    uint8_t buf9[3];
+    at.read_bytes(buf9, 5);
+    CHECK(!memcmp(buf9, "\r\nabc", 5));
 }
 
 void Test_ATHandler::test_ATHandler_resp_stop()

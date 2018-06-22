@@ -713,7 +713,7 @@ void Test_ATHandler::test_ATHandler_read_hex_string()
 
     ATHandler at(&fh1, que, 0, ",");
 
-    // ***  ***
+    // *** Read up to delimiter, even length ***
     at.clear_error();
     char table1[] = "68656C6C6F,";
     at.flush();
@@ -724,28 +724,26 @@ void Test_ATHandler::test_ATHandler_read_hex_string()
     char buf1[10];
     // Set _stop_tag to resp_stop(OKCRLF)
     at.resp_start();
-    //
     CHECK(5 == at.read_hex_string(buf1, 9 + 1/*for NULL*/));
     CHECK(!strcmp(buf1, "hello"));
 
-    // ***  ***
+    // *** Read up to delimiter, odd length ***
     at.clear_error();
-    char table2[] = "6865OK\r\n";
+    char table2[] = "68656C6C6F7,";
     at.flush();
     filehandle_stub_table = table2;
     filehandle_stub_table_pos = 0;
     mbed_poll_stub::revents_value = POLLIN;
     mbed_poll_stub::int_value = 1;
-    char buf2[6];
+    char buf2[10];
     // Set _stop_tag to resp_stop(OKCRLF)
     at.resp_start();
-    //
-    CHECK(2 == at.read_hex_string(buf2, 2 + 1/*Start stop tag match*/ + 1/*for NULL*/));
-    CHECK(!strcmp(buf2, "he"));
+    CHECK(5 == at.read_hex_string(buf2, 9 + 1/*for NULL*/));
+    CHECK(!strcmp(buf2, "hello"));
 
-    // ***  ***
+    // *** Read with stop tag, even length ***
     at.clear_error();
-    char table3[] = "686OK\r\n";
+    char table3[] = "6865OK\r\n";
     at.flush();
     filehandle_stub_table = table3;
     filehandle_stub_table_pos = 0;
@@ -754,9 +752,23 @@ void Test_ATHandler::test_ATHandler_read_hex_string()
     char buf3[6];
     // Set _stop_tag to resp_stop(OKCRLF)
     at.resp_start();
-    //
-    CHECK(1 == at.read_hex_string(buf3, 2 + 1/*Start stop tag match*/ + 1/*for NULL*/));
-    CHECK(!strcmp(buf3, "h"));
+    CHECK(2 == at.read_hex_string(buf3, 2 + 1/*get to stop tag match*/ + 1/*for NULL*/));
+    CHECK(!strcmp(buf3, "he"));
+    at.resp_stop();
+
+    // *** Read with stop tag, odd length ***
+    at.clear_error();
+    char table4[] = "686OK\r\n";
+    at.flush();
+    filehandle_stub_table = table4;
+    filehandle_stub_table_pos = 0;
+    mbed_poll_stub::revents_value = POLLIN;
+    mbed_poll_stub::int_value = 1;
+    char buf4[6];
+    // Set _stop_tag to resp_stop(OKCRLF)
+    at.resp_start();
+    CHECK(1 == at.read_hex_string(buf4, 2 + 1/*get to stop tag match*/ + 1/*for NULL*/));
+    CHECK(!strcmp(buf4, "h"));
 }
 
 void Test_ATHandler::test_ATHandler_read_int()

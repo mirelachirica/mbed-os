@@ -772,6 +772,7 @@ void ATHandler::at_error(bool error_code_expected, DeviceErrorType error_type)
 
 void ATHandler::resp(const char *prefix, bool check_urc)
 {
+    tr_info("!!! resp !!!");
     _prefix_matched = false;
     _urc_matched = false;
     _error_found = false;

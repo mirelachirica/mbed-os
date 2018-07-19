@@ -221,3 +221,13 @@ TEST(ATHandler, test_ATHandler_get_3gpp_error)
 {
     unit->test_ATHandler_get_3gpp_error();
 }
+
+TEST(ATHandler, test_ATHandler_set_is_filehandle_usable)
+{
+    unit->test_ATHandler_set_is_filehandle_usable();
+}
+
+TEST(ATHandler, test_ATHandler_set_default_delimiter)
+{
+    unit->test_ATHandler_set_default_delimiter();
+}

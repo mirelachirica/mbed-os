@@ -97,6 +97,10 @@ public:
     void test_ATHandler_set_debug();
 
     void test_ATHandler_get_3gpp_error();
+
+    void test_ATHandler_set_is_filehandle_usable();
+
+    void test_ATHandler_set_default_delimiter();
 };
 
 #endif // TEST_ATHANDLER_H

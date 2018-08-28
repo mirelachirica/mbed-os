@@ -67,8 +67,6 @@ public: // CellularNetwork
 
     virtual nsapi_error_t get_network_registering_mode(NWRegisteringMode &mode);
 
-    virtual nsapi_error_t get_registration_status(RegistrationType type, RegistrationStatus &status);
-
     virtual nsapi_error_t set_attach(int timeout = 10 * 1000);
 
     virtual nsapi_error_t get_attach(AttachStatus &status);
@@ -89,7 +87,6 @@ public: // CellularNetwork
     virtual const char *get_ip_address();
 
     virtual nsapi_error_t set_access_technology(RadioAccessTechnology rat);
-    virtual nsapi_error_t get_access_technology(RadioAccessTechnology &rat);
 
     virtual nsapi_error_t scan_plmn(operList_t &operators, int &ops_count);
 
@@ -109,7 +106,12 @@ public: // CellularNetwork
 
     virtual nsapi_error_t get_signal_quality(int &rssi, int &ber);
 
-    virtual nsapi_error_t get_cell_id(int &cell_id);
+    virtual nsapi_error_t get_registration_params(registration_params_t &reg_params);
+    virtual nsapi_error_t get_registration_params(RegistrationType type, registration_params_t &reg_params);
+
+    //virtual nsapi_error_t get_registration_status(RegistrationType type, RegistrationStatus &status);
+    //virtual nsapi_error_t get_cell_id(int &cell_id);
+    //virtual nsapi_error_t get_access_technology(RadioAccessTechnology &rat);
 
     virtual int get_3gpp_error();
 
@@ -162,6 +164,8 @@ private:
 
     void read_reg_params_and_compare(RegistrationType type);
     void read_reg_params(RegistrationType type, RegistrationStatus &reg_status, int &lac, int &cell_id, int &act);
+    void read_reg_params(registration_params_t &reg_params);
+
     // calls network callback only if status was changed, updates local connection status
     void call_network_cb(nsapi_connection_status_t status);
 #if NSAPI_PPP_AVAILABLE
@@ -179,12 +183,12 @@ protected:
     Callback<void(nsapi_event_t, intptr_t)> _connection_status_cb;
     RadioAccessTechnology _op_act;
     AuthenticationType _authentication_type;
-    int _cell_id;
     nsapi_connection_status_t _connect_status;
     bool _new_context_set;
     bool _is_context_active;
-    RegistrationStatus _reg_status;
-    RadioAccessTechnology _current_act;
+
+    registration_params_t _reg_params;
+
     mbed::Callback<void()> _urc_funcs[C_MAX];
 };
 

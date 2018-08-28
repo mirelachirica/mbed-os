@@ -300,6 +300,20 @@ void uint_to_binary_str(uint32_t num, char *str, int str_size, int bit_cnt)
     }
 }
 
+uint32_t binary_str_to_uint(const char *binary_string, int binary_string_length)
+{
+    const int base = 2;
+    int character_as_integer, integer_output = 0, base_exp = 128;
+
+    for (int i = 0; i < binary_string_length && binary_string[i] != '\0'; i++) {
+        character_as_integer = binary_string[i] - '0';
+        integer_output += character_as_integer * base_exp;
+        base_exp = base_exp / base;
+    }
+
+    return integer_output;
+}
+
 int char_str_to_hex_str(const char *str, uint16_t len, char *buf, bool omit_leading_zero)
 {
     if (!str || !buf) {

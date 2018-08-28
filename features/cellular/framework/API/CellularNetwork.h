@@ -222,6 +222,39 @@ public:
         NWModeManualAutomatic   // if manual fails, fallback to automatic
     };
 
+    /* Network registration information */
+    struct registration_params_t {
+        RegistrationType _type;
+        RegistrationStatus _status;
+        RadioAccessTechnology _act;
+        int _cell_id;
+        int _lac;
+        int _active_time;
+        int _periodic_tau;
+
+        registration_params_t()
+        {
+            _type = C_MAX;
+            _status = NotRegistered;
+            _act = RAT_UNKNOWN;
+            _cell_id = -1;
+            _lac = -1;
+            _active_time = -1;
+            _periodic_tau = -1;
+        }
+
+       /*registration_params_t& operator=(const registration_params_t& other)
+        {
+            _type = other._type;
+            _status = other._status;
+            _act = other._act;
+            _cell_id = other._cell_id;
+            _lac = other._lac;
+            _active_time = other._active_time;
+            _periodic_tau = other._periodic_tau;
+            return *this;
+        }*/
+    };
 
     /** Does all the needed initializations that can fail
      *
@@ -268,7 +301,7 @@ public:
      *                  NSAPI_ERROR_UNSUPPORTED if the modem does not support RegistrationType
      *                  NSAPI_ERROR_DEVICE_ERROR on failure
      */
-    virtual nsapi_error_t get_registration_status(RegistrationType type, RegistrationStatus &status) = 0;
+    //virtual nsapi_error_t get_registration_status(RegistrationType type, RegistrationStatus &status) = 0;
 
     /** Set the cellular network APN and credentials
      *
@@ -348,13 +381,6 @@ public:
      *                       OR return value of the inheriting target class set_access_technology_impl(...)
      */
     virtual nsapi_error_t set_access_technology(RadioAccessTechnology rat) = 0;
-
-    /** Get current radio access technology.
-     *
-     *  @param rat           Radio access technology
-     *  @return              NSAPI_ERROR_OK
-     */
-    virtual nsapi_error_t get_access_technology(RadioAccessTechnology &rat) = 0;
 
     /** Scans for operators module can reach.
      *
@@ -472,13 +498,6 @@ public:
      */
     virtual nsapi_error_t get_signal_quality(int &rssi, int &ber) = 0;
 
-    /** Get cell id.
-     *
-     *  @param cell_id  cell ID
-     *  @return         NSAPI_ERROR_OK
-     */
-    virtual nsapi_error_t get_cell_id(int &cell_id) = 0;
-
     /** Get the last 3GPP error code
      *  @return see 3GPP TS 27.007 error codes
      */
@@ -525,6 +544,23 @@ public:
      *                       NSAPI_ERROR_DEVICE_ERROR on other failures
      */
     virtual nsapi_error_t get_operator_names(operator_names_list &op_names) = 0;
+
+    /** Get cell id.
+     *
+     *  @param cell_id  cell ID
+     *  @return         NSAPI_ERROR_OK
+     */
+   // virtual nsapi_error_t get_cell_id(int &cell_id) = 0;
+
+    /** Get current radio access technology.
+     *
+     *  @param rat           Radio access technology
+     *  @return              NSAPI_ERROR_OK
+     */
+    //virtual nsapi_error_t get_access_technology(RadioAccessTechnology &rat) = 0;
+
+    virtual nsapi_error_t get_registration_params(registration_params_t &reg_params) = 0;
+    virtual nsapi_error_t get_registration_params(RegistrationType type, registration_params_t &reg_params) = 0;
 };
 
 } // namespace mbed

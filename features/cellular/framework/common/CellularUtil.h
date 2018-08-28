@@ -105,6 +105,8 @@ int hex_str_to_char_str(const char *str, uint16_t len, char *buf);
  */
 void uint_to_binary_str(uint32_t num, char *str, int str_size, int bit_cnt);
 
+uint32_t binary_str_to_uint(const char *binary_string, int binary_string_length);
+
 /** Get dynamic port for socket
  *
  *  @return next port number above 49152

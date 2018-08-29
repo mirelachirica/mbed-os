@@ -106,9 +106,6 @@ public: // CellularNetwork
 
     virtual nsapi_error_t get_signal_quality(int &rssi, int &ber);
 
-    virtual nsapi_error_t get_registration_params(registration_params_t &reg_params);
-    virtual nsapi_error_t get_registration_params(RegistrationType type, registration_params_t &reg_params);
-
     //virtual nsapi_error_t get_registration_status(RegistrationType type, RegistrationStatus &status);
     //virtual nsapi_error_t get_cell_id(int &cell_id);
     //virtual nsapi_error_t get_access_technology(RadioAccessTechnology &rat);
@@ -120,6 +117,10 @@ public: // CellularNetwork
     virtual nsapi_error_t set_registration_urc(RegistrationType type, bool on);
 
     virtual nsapi_error_t get_operator_names(operator_names_list &op_names);
+
+    virtual nsapi_error_t get_registration_params(registration_params_t &reg_params);
+
+    virtual nsapi_error_t get_registration_params(RegistrationType type, registration_params_t &reg_params);
 protected:
 
     /** Check if modem supports the given stack type.

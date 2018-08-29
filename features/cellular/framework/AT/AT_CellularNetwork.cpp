@@ -118,10 +118,8 @@ void AT_CellularNetwork::urc_cgev()
     // NOTE! If in future there will be 2 or more active contexts we might wan't to read context id also but not for now.
 
     if (memcmp(buf, "NW DETACH", 9) == 0) { // The network has forced a PS detach
-        tr_error("NW DETACH");
         call_cb = true;
     } else if (memcmp(buf, "ME DETACH", 9) == 0) {// The mobile termination has forced a PS detach.
-        tr_error("ME DETACH");
         call_cb = true;
     } else if (memcmp(buf, "NW DEACT", 8) == 0) {// The network has forced a context deactivation
         call_cb = true;
@@ -786,7 +784,6 @@ void AT_CellularNetwork::read_reg_params(RegistrationType type, RegistrationStat
     }
 
     act = _at.read_int();
-    tr_error("ACT: %d", act);
 
     if (lac_read) {
         lac = hex_str_to_int(lac_string, LAC_LENGTH);
@@ -1386,8 +1383,11 @@ nsapi_error_t AT_CellularNetwork::get_registration_params(RegistrationType type,
     _at.resp_start(rsp[i]);
 
     (void)_at.read_int(); // ignore urc mode subparam
+    _reg_params._type = type;
     read_reg_params(_reg_params);
     _at.resp_stop();
+
+    reg_params = _reg_params;
 
     return _at.unlock_return_error();
 }

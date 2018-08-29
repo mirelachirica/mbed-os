@@ -560,6 +560,7 @@ public:
     //virtual nsapi_error_t get_access_technology(RadioAccessTechnology &rat) = 0;
 
     virtual nsapi_error_t get_registration_params(registration_params_t &reg_params) = 0;
+
     virtual nsapi_error_t get_registration_params(RegistrationType type, registration_params_t &reg_params) = 0;
 };
 

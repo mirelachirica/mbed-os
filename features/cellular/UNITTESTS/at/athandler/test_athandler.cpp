@@ -529,7 +529,7 @@ void Test_ATHandler::test_ATHandler_read_string()
     CHECK(NSAPI_ERROR_DEVICE_ERROR == at.get_last_error());
     at.clear_error();
     // Device error because empty buffer and attempt to fill_buffer by consume_char('\"')
-    CHECK(-1 == at.read_string(buf1, 1));
+    CHECK(0 == at.read_string(buf1, 1));
 
     // *** 1 BYTE ***
     at.clear_error();
@@ -549,7 +549,7 @@ void Test_ATHandler::test_ATHandler_read_string()
 
     // *** CRLF ***
     at.clear_error();
-    char table3[] = "\r\ns\r\n\0";
+    char table3[] = "\r\n,s\r\n\0";
     at.flush();
     filehandle_stub_table = table3;
     filehandle_stub_table_pos = 0;
@@ -619,12 +619,8 @@ void Test_ATHandler::test_ATHandler_read_string()
     at.resp_start();
     // TO read 1 byte from: "s"OK\r\n -> read "
     at.read_bytes(buf5, 1);
-    // TO read max 1 byte from: s"OK\r\n -> read s
+    // TO read max 1 byte from: s"OK\r\n -> read s + read to stop_tag(OKCRLF)
     CHECK(1 == at.read_string(buf4, 1 + 1/*for NULL*/));
-
-    // *** Consume " and run into OKCRLF  ***
-    // TO read max 1 byte from: "OK\r\n -> consume " and find stop tag OKCRLF
-    CHECK(0 == at.read_string(buf4, 1 + 1/*for NULL*/));
 
     // *** Try to read after stop tag was found  ***
     // stop tag found do not read further
@@ -655,7 +651,7 @@ void Test_ATHandler::test_ATHandler_read_string()
     mbed_poll_stub::revents_value = POLLIN;
     mbed_poll_stub::int_value = 1;
     at.resp_start("s");
-    // TO read from buffer having only " -> consume " -> trying to read when nothing in buffer
+    // TO read from buffer having only " -> trying to find delimiter or stop_tag(OKCRLF)
     CHECK(-1 == at.read_string(buf4, 5));
     CHECK(NSAPI_ERROR_DEVICE_ERROR == at.get_last_error());
 
@@ -687,6 +683,20 @@ void Test_ATHandler::test_ATHandler_read_string()
     at.resp_start();
     // TO read from
     CHECK(6 == at.read_string(buf9, 6 + 1/*for NULL*/));
+
+    at.clear_error();
+    char table11[] = "\"1016\",\"39AB\",9\r\n\0";
+    at.flush();
+    filehandle_stub_table = table11;
+    filehandle_stub_table_pos = 0;
+    mbed_poll_stub::revents_value = POLLIN;
+    mbed_poll_stub::int_value = 1;
+    at.resp_start();
+    CHECK(4 == at.read_string(buf4, 4 + 1/*for NULL*/));
+    CHECK(!strncmp(buf4, "1016", 4));
+    CHECK(4 == at.read_string(buf4, 4 + 1/*for NULL*/));
+    CHECK(!strncmp(buf4, "39AB", 4));
+    CHECK(9 == at.read_int());
 
     // *** CRLF part of the string ***
     at.clear_error();

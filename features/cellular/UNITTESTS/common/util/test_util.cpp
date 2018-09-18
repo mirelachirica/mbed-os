@@ -30,6 +30,23 @@ Test_util::~Test_util()
 {
 }
 
+void Test_util::test_util_binary_str_to_uint()
+{
+    char binary_str[]="011001011101101000";
+    uint32_t value = binary_str_to_uint(binary_str, strlen(binary_str) + 1);
+    CHECK(value == 104296);
+    value = binary_str_to_uint(binary_str, strlen(binary_str));
+    CHECK(value == 104296);
+    value = binary_str_to_uint(binary_str, strlen(binary_str) - 1);
+    CHECK(value == 52148);
+    value = binary_str_to_uint(binary_str, strlen(binary_str) - 3);
+    CHECK(value == 13037);
+    value = binary_str_to_uint(binary_str + 5, strlen(binary_str) - 5);
+    CHECK(value == 5992);
+    CHECK(0 == binary_str_to_uint(NULL, 5));
+    CHECK(0 == binary_str_to_uint(binary_str, 0));
+}
+
 void Test_util::test_util_uint_to_binary_string()
 {
     char str[33];

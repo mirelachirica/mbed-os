@@ -40,6 +40,11 @@ TEST(util, Create)
     CHECK(unit != NULL);
 }
 
+TEST(util, test_util_binary_str_to_uint)
+{
+    unit->test_util_binary_str_to_uint();
+}
+
 TEST(util, test_util_uint_to_binary_string)
 {
     unit->test_util_uint_to_binary_string();

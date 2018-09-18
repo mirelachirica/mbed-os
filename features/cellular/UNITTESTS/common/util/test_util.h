@@ -23,6 +23,8 @@ public:
 
     virtual ~Test_util();
 
+    void test_util_binary_str_to_uint();
+
     void test_util_uint_to_binary_string();
 
     void test_util_char_str_to_hex();

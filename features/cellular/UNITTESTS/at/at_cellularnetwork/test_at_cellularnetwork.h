@@ -39,8 +39,6 @@ public:
 
     void test_AT_CellularNetwork_set_registration();
 
-    void test_AT_CellularNetwork_get_registration_status();
-
     void test_AT_CellularNetwork_get_network_registering_mode();
 
     void test_AT_CellularNetwork_set_registration_urc();
@@ -59,8 +57,6 @@ public:
 
     void test_AT_CellularNetwork_set_access_technology();
 
-    void test_AT_CellularNetwork_get_access_technology();
-
     void test_AT_CellularNetwork_scan_plmn();
 
     void test_AT_CellularNetwork_set_ciot_optimization_config();
@@ -77,7 +73,7 @@ public:
 
     void test_AT_CellularNetwork_get_signal_quality();
 
-    void test_AT_CellularNetwork_get_cell_id();
+    void test_AT_CellularNetwork_get_registration_params();
 
     void test_AT_CellularNetwork_get_3gpp_error();
 

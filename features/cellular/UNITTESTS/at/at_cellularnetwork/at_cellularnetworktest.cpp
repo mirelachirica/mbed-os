@@ -84,11 +84,6 @@ TEST(AT_CellularNetwork, test_AT_CellularNetwork_set_registration)
     unit->test_AT_CellularNetwork_set_registration();
 }
 
-TEST(AT_CellularNetwork, test_AT_CellularNetwork_get_registration_status)
-{
-    unit->test_AT_CellularNetwork_get_registration_status();
-}
-
 TEST(AT_CellularNetwork, test_AT_CellularNetwork_get_network_registering_mode)
 {
     unit->test_AT_CellularNetwork_get_network_registering_mode();
@@ -134,11 +129,6 @@ TEST(AT_CellularNetwork, test_AT_CellularNetwork_set_access_technology)
     unit->test_AT_CellularNetwork_set_access_technology();
 }
 
-TEST(AT_CellularNetwork, test_AT_CellularNetwork_get_access_technology)
-{
-    unit->test_AT_CellularNetwork_get_access_technology();
-}
-
 TEST(AT_CellularNetwork, test_AT_CellularNetwork_scan_plmn)
 {
     unit->test_AT_CellularNetwork_scan_plmn();
@@ -179,9 +169,9 @@ TEST(AT_CellularNetwork, test_AT_CellularNetwork_get_signal_quality)
     unit->test_AT_CellularNetwork_get_signal_quality();
 }
 
-TEST(AT_CellularNetwork, test_AT_CellularNetwork_get_cell_id)
+TEST(AT_CellularNetwork, test_AT_CellularNetwork_get_registration_params)
 {
-    unit->test_AT_CellularNetwork_get_cell_id();
+    unit->test_AT_CellularNetwork_get_registration_params();
 }
 
 TEST(AT_CellularNetwork, test_AT_CellularNetwork_get_3gpp_error)

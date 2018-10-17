@@ -727,3 +727,152 @@ TEST_F(TestMux, channel_open_mux_not_open)
     EXPECT_TRUE(callback.is_callback_called());
     EXPECT_TRUE(callback.file_handle_get() != NULL);
 }
+
+
+/*
+ * TC - Ensure proper behaviour when channel is opened and multiplexer control channel open is currently running
+ *
+ * Test sequence:
+ * - Start sending open multiplexer control channel request message, but do not finish it
+ * - Issue new channel_open API call => fails with NSAPI_ERROR_IN_PROGRESS
+ * - Finish sending open multiplexer control channel request message
+
+
+ * - Receive open multiplexer control channel response message
+ * - Send open user channel request message
+ * - Receive open user channel response message
+ * - Generate channel open callback with a valid FileHandle
+ * - Issue new channel_open API call => accepted with NSAPI_ERROR_OK
+ * - Start sending open user channel request message , but do not finish it
+ * - Issue new channel_open API call => fails with NSAPI_ERROR_IN_PROGRESS
+ *
+ * Expected outcome:
+ * - As specified above
+ */
+TEST(MultiplexerOpenTestGroup, channel_open_mux_open_currently_running)
+{
+    InSequence dummy;
+
+    mbed::Mux3GPP obj;
+
+    events::EventQueue eq;
+    obj.eventqueue_attach(&eq);
+
+    MockFileHandle fh;
+    SigIo          sig_io;
+    EXPECT_CALL(fh, sigio(_)).Times(1).WillOnce(Invoke(&sig_io, &SigIo::sigio));
+    EXPECT_CALL(fh, set_blocking(false)).WillOnce(Return(0));
+
+    obj.serial_attach(&fh);
+
+    MuxCallbackTest callback;
+    obj.callback_attach(mbed::Callback<void(mbed::MuxBase::event_context_t &)>(&callback,
+                        &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
+
+    const uint8_t write_byte_mux_open[6] =
+    {
+        FLAG_SEQUENCE_OCTET,
+        ADDRESS_MUX_START_REQ_OCTET,
+        (FRAME_TYPE_SABM | PF_BIT),
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&write_byte_mux_open[1], 3),
+        FLAG_SEQUENCE_OCTET
+    };
+
+    /* Program TX of 1st byte of open multiplexer control channel request. */
+    FileWrite write_1(&(write_byte_mux_open[0]), sizeof(write_byte_mux_open), 1);
+    EXPECT_CALL(fh, write(NotNull(), SABM_FRAME_LEN))
+                .WillOnce(Invoke(&write_1, &FileWrite::write)).RetiresOnSaturation();
+    FileWrite write_2(&(write_byte_mux_open[1]), (sizeof(write_byte_mux_open) - 1u), 0);
+    EXPECT_CALL(fh, write(NotNull(), (SABM_FRAME_LEN - 1u)))
+                .WillOnce(Invoke(&write_2, &FileWrite::write)).RetiresOnSaturation();
+
+    /* Start test sequence. */
+    nsapi_error channel_open_err = obj.channel_open();
+    EXPECT_EQ(NSAPI_ERROR_OK, channel_open_err);
+
+    /* Issue new channel open, while previous one is still running. */
+    channel_open_err = obj.channel_open();
+    EXPECT_EQ(NSAPI_ERROR_IN_PROGRESS, channel_open_err);
+
+    /* Finish sending open multiplexer control channel request message. */
+
+    self_iniated_request_tx(&write_byte_mux_open[1], (SABM_FRAME_LEN - 1u), FLAG_SEQUENCE_OCTET_LEN, fh, sig_io);
+
+    /* Issue new channel open, while previous one is still running. */
+    channel_open_err = obj.channel_open();
+    EXPECT_EQ(NSAPI_ERROR_IN_PROGRESS, channel_open_err);
+
+    /* Receive open multiplexer control channel response message. */
+
+    const uint8_t read_byte[6] =
+    {
+        FLAG_SEQUENCE_OCTET,
+        ADDRESS_MUX_START_RESP_OCTET,
+        (FRAME_TYPE_UA | PF_BIT),
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&read_byte[1], 3),
+        FLAG_SEQUENCE_OCTET
+    };
+    /* Reception of the mux open response frame starts the channel creation procedure. */
+    const uint32_t address_1st_channel_open = (3u) | (1u << 2);
+    uint8_t write_byte_1st_channel_open[6]  =
+    {
+        FLAG_SEQUENCE_OCTET,
+        address_1st_channel_open,
+        (FRAME_TYPE_SABM | PF_BIT),
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&write_byte_1st_channel_open[1], 3),
+        FLAG_SEQUENCE_OCTET
+    };
+    peer_iniated_request_rx_full_frame_tx(READ_FLAG_SEQUENCE_OCTET, STRIP_FLAG_FIELD_NO,
+                                          &(read_byte[0]), sizeof(read_byte),
+                                          &(write_byte_1st_channel_open[0]), sizeof(write_byte_1st_channel_open),
+                                          CANCEL_TIMER_YES, START_TIMER_YES,
+                                          fh, sig_io);
+
+    /* Read the channel open response frame. */
+    callback.callback_arm();
+    const uint8_t read_byte_channel_open[5]  =
+    {
+        (3u | (1u << 2)),
+        (FRAME_TYPE_UA | PF_BIT),
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&read_byte_channel_open[0], 3),
+        FLAG_SEQUENCE_OCTET
+    };
+    self_iniated_response_rx(&(read_byte_channel_open[0]), NULL, SKIP_FLAG_SEQUENCE_OCTET, STRIP_FLAG_FIELD_NO,
+                             ENQUEUE_DEFERRED_CALL_YES,
+                             fh, sig_io);
+
+    /* Validate Filehandle generation. */
+    EXPECT_TRUE(callback.is_callback_called());
+    EXPECT_TRUE(callback.file_handle_get() != NULL);
+
+    /* Program TX of 1st byte of open channel request. */
+
+    const uint32_t address_2nd_channel_open = (3u) | (2u << 2);
+    uint8_t write_byte_2nd_channel_open[6]  =
+    {
+        FLAG_SEQUENCE_OCTET,
+        address_2nd_channel_open,
+        (FRAME_TYPE_SABM | PF_BIT),
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&write_byte_2nd_channel_open[1], 3),
+        FLAG_SEQUENCE_OCTET
+    };
+    FileWrite write_3(&(write_byte_2nd_channel_open[0]), sizeof(write_byte_2nd_channel_open), 1);
+    EXPECT_CALL(fh, write(NotNull(), SABM_FRAME_LEN))
+                .WillOnce(Invoke(&write_3, &FileWrite::write)).RetiresOnSaturation();
+    FileWrite write_4(&(write_byte_2nd_channel_open[1]), (sizeof(write_byte_2nd_channel_open) - 1u), 0);
+    EXPECT_CALL(fh, write(NotNull(), (SABM_FRAME_LEN - 1u)))
+                .WillOnce(Invoke(&write_4, &FileWrite::write)).RetiresOnSaturation();
+
+    /* Start test sequence. */
+    channel_open_err = obj.channel_open();
+    CHECK_EQUAL(NSAPI_ERROR_OK, channel_open_err);
+
+    /* Issue new channel open, while previous one is still running. */
+    channel_open_err = obj.channel_open();
+    CHECK_EQUAL(NSAPI_ERROR_IN_PROGRESS, channel_open_err);
+}

@@ -17,9 +17,11 @@
 
 #include "equeue.h"
 #include "equeue_stub.h"
+#include "gtest/gtest.h"
 #include <stdlib.h>
 #include <stdio.h>
 
+bool mbed_equeue_stub::is_call_armed                     = false;
 bool mbed_equeue_stub::is_delay_called                   = false;
 mbed_equeue_stub_cb_func_t mbed_equeue_stub::timer_cb    = NULL;
 mbed_equeue_stub_cb_func_t mbed_equeue_stub::deferred_cb = NULL;
@@ -27,6 +29,12 @@ void *mbed_equeue_stub::timer_cb_cntx                    = NULL;
 void *mbed_equeue_stub::deferred_cb_cntx                 = NULL;
 
 namespace mbed_equeue_stub {
+
+void call_expect()
+{
+    EXPECT_FALSE(is_call_armed);
+    is_call_armed = true;
+}
 
 void deferred_dispatch()
 {
@@ -115,6 +123,9 @@ int equeue_post(equeue_t *queue, void (*cb)(void *), void *event)
             mbed_equeue_stub::timer_cb_cntx   = event;
         } else {
 //printf("store deferred\r\n");
+            EXPECT_TRUE(mbed_equeue_stub::is_call_armed);
+
+            mbed_equeue_stub::is_call_armed    = false;
             mbed_equeue_stub::deferred_cb      = cb;
             mbed_equeue_stub::deferred_cb_cntx = event;
         }

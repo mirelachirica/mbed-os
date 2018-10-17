@@ -20,6 +20,7 @@
 typedef void (*mbed_equeue_stub_cb_func_t)(void*);
 
 namespace mbed_equeue_stub {
+extern bool is_call_armed;
 extern bool is_delay_called;
 extern mbed_equeue_stub_cb_func_t timer_cb;
 extern mbed_equeue_stub_cb_func_t deferred_cb;
@@ -28,6 +29,7 @@ extern void *deferred_cb_cntx;
 
 void deferred_dispatch();
 void timer_dispatch();
+void call_expect();
 };
 
 #endif

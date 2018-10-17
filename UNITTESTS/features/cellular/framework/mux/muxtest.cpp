@@ -323,14 +323,8 @@ void self_iniated_request_tx(const uint8_t  *tx_buf,
     do {
         /* Enqueue deferred call to EventQueue.
          * Trigger sigio callback from the Filehandle used by the Mux3GPP (component under test). */
+        mbed_equeue_stub::call_expect();
         sig_io.dispatch();
-#if 0
-        mock_t * mock = mock_free_get("call");
-        CHECK(mock != NULL);
-        mock->return_value = 1;
-
-        mbed::FileHandleMock::io_control(io_control);
-#endif
 
         /* Nothing to read. */
         EXPECT_CALL(fh, read(NotNull(), read_len)).WillOnce(Return(-EAGAIN)).RetiresOnSaturation();
@@ -402,13 +396,7 @@ void peer_iniated_request_rx_full_frame_tx(FlagSequenceOctetReadType read_type,
 
     /* Enqueue deferred call to EventQueue.
      * Trigger sigio callback from the Filehandle used by the Mux3GPP (component under test). */
-
-    // @todo: program for "call"
-#if 0
-    mock_t * mock = mock_free_get("call");
-    CHECK(mock != NULL);
-    mock->return_value = 1;
-#endif
+    mbed_equeue_stub::call_expect();
     sig_io.dispatch();
 
     if (read_type == READ_FLAG_SEQUENCE_OCTET) {
@@ -530,13 +518,7 @@ void self_iniated_response_rx(const uint8_t            *rx_buf,
     if (enqueue_deferred_call_type == ENQUEUE_DEFERRED_CALL_YES) {
         /* Enqueue deferred call to EventQueue.
          * Trigger sigio callback from the Filehandle used by the Mux3GPP (component under test). */
-
-        // @todo: program for "call"
-#if 0
-        mock_t * mock = mock_free_get("call");
-        CHECK(mock != NULL);
-        mock->return_value = 1;
-#endif
+        mbed_equeue_stub::call_expect();
         sig_io.dispatch();
     }
 

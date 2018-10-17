@@ -323,7 +323,7 @@ void self_iniated_request_tx(const uint8_t  *tx_buf,
     do {
         /* Enqueue deferred call to EventQueue.
          * Trigger sigio callback from the Filehandle used by the Mux3GPP (component under test). */
-        mbed_equeue_stub::call_expect();
+        mbed_equeue_stub::call_expect(1);
         sig_io.dispatch();
 
         /* Nothing to read. */
@@ -334,7 +334,7 @@ void self_iniated_request_tx(const uint8_t  *tx_buf,
 
         if (tx_count == tx_buf_len - 1) {
             /* Start frame write sequence gets completed, now start T1 timer. */
-            mbed_equeue_stub::call_in_expect(T1_TIMER_VALUE);
+            mbed_equeue_stub::call_in_expect(T1_TIMER_VALUE, 1);
         } else {
             /* End the write cycle after successfull write made above in this loop. */
             FileWrite write_2(&(tx_buf[tx_count + 1u]), (tx_buf_len - (tx_count + 1u)), 0);
@@ -390,7 +390,7 @@ void peer_iniated_request_rx_full_frame_tx(FlagSequenceOctetReadType read_type,
 
     /* Enqueue deferred call to EventQueue.
      * Trigger sigio callback from the Filehandle used by the Mux3GPP (component under test). */
-    mbed_equeue_stub::call_expect();
+    mbed_equeue_stub::call_expect(1);
     sig_io.dispatch();
 
     if (read_type == READ_FLAG_SEQUENCE_OCTET) {
@@ -451,17 +451,12 @@ ASSERT_TRUE(false); // @todo: implement me
 
     /* Cancel the T1 timer. */
     if (cancel_timer == CANCEL_TIMER_YES) {
-#if 0
-        mock_t * mock_cancel = mock_free_get("cancel");
-        CHECK(mock_cancel != NULL);
-        mock_cancel->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
-        mock_cancel->input_param[0].param        = T1_TIMER_EVENT_ID;
-#endif
+        mbed_equeue_stub::cancel_expect(1);
     }
 
     /* Start the T1 timer for the new TX sequence. */
     if (start_timer == START_TIMER_YES) {
-        mbed_equeue_stub::call_in_expect(T1_TIMER_VALUE);
+        mbed_equeue_stub::call_in_expect(T1_TIMER_VALUE, 1);
     }
 
     /* RX frame completed, start the response frame TX sequence inside the current RX cycle. */
@@ -506,7 +501,7 @@ void self_iniated_response_rx(const uint8_t            *rx_buf,
     if (enqueue_deferred_call_type == ENQUEUE_DEFERRED_CALL_YES) {
         /* Enqueue deferred call to EventQueue.
          * Trigger sigio callback from the Filehandle used by the Mux3GPP (component under test). */
-        mbed_equeue_stub::call_expect();
+        mbed_equeue_stub::call_expect(1);
         sig_io.dispatch();
     }
 
@@ -555,13 +550,8 @@ void self_iniated_response_rx(const uint8_t            *rx_buf,
     } while (read_len != 0);
 
     /* Frame read sequence gets completed, now cancel T1 timer. */
-#if 0
-    // @todo: program "cancel"
-    mock_t * mock_cancel = mock_free_get("cancel");
-    CHECK(mock_cancel != NULL);
-    mock_cancel->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
-    mock_cancel->input_param[0].param        = T1_TIMER_EVENT_ID;
-#endif
+    mbed_equeue_stub::cancel_expect(1);
+
     if (resp_write_byte != NULL)  {
         /* RX frame completed, start the response frame TX sequence inside the current RX cycle. */
 ASSERT_TRUE(false); //  @todo: implement this block

@@ -21,6 +21,9 @@
 #include <stdlib.h>
 #include <stdio.h>
 
+int mbed_equeue_stub::deferred_call_return_value         = 0;
+int mbed_equeue_stub::cancel_id                          = 0;
+bool mbed_equeue_stub::is_cancel_armed                   = false;
 bool mbed_equeue_stub::is_call_armed                     = false;
 bool mbed_equeue_stub::is_call_in_armed                  = false;
 int mbed_equeue_stub::is_call_in_ms                      = 0;
@@ -32,18 +35,29 @@ void *mbed_equeue_stub::deferred_cb_cntx                 = NULL;
 
 namespace mbed_equeue_stub {
 
-void call_in_expect(int ms)
+void cancel_expect(int id)
+{
+    EXPECT_FALSE(is_cancel_armed);
+
+    cancel_id       = id;
+    is_cancel_armed = true;
+}
+
+void call_in_expect(int ms, int return_value)
 {
     EXPECT_FALSE(is_call_in_armed);
 
-    is_call_in_ms    = ms;
-    is_call_in_armed = true;
+    deferred_call_return_value = return_value;
+    is_call_in_ms              = ms;
+    is_call_in_armed           = true;
 }
 
-void call_expect()
+void call_expect(int return_value)
 {
     EXPECT_FALSE(is_call_armed);
-    is_call_armed = true;
+
+    deferred_call_return_value = return_value;
+    is_call_armed              = true;
 }
 
 void deferred_dispatch()
@@ -125,36 +139,36 @@ void equeue_event_dtor(void *event, void (*dtor)(void *))
 int equeue_post(equeue_t *queue, void (*cb)(void *), void *event)
 {
 //printf("equeue_post\r\n");
-    if (cb)
-    {
-        if (mbed_equeue_stub::is_delay_called) {
-            mbed_equeue_stub::is_delay_called = false;
+
+    if (mbed_equeue_stub::is_delay_called) {
+        mbed_equeue_stub::is_delay_called = false;
 //printf("store timer\r\n");
-            EXPECT_TRUE(mbed_equeue_stub::is_call_in_armed);
-            mbed_equeue_stub::is_call_in_armed = false;
+        EXPECT_TRUE(mbed_equeue_stub::is_call_in_armed);
+        mbed_equeue_stub::is_call_in_armed = false;
 
-            mbed_equeue_stub::timer_cb        = cb;
-            mbed_equeue_stub::timer_cb_cntx   = event;
-        } else {
+        mbed_equeue_stub::timer_cb        = cb;
+        mbed_equeue_stub::timer_cb_cntx   = event;
+    } else {
 //printf("store deferred\r\n");
-            EXPECT_TRUE(mbed_equeue_stub::is_call_armed);
-            mbed_equeue_stub::is_call_armed = false;
+        EXPECT_TRUE(mbed_equeue_stub::is_call_armed);
+        mbed_equeue_stub::is_call_armed = false;
 
-            mbed_equeue_stub::deferred_cb      = cb;
-            mbed_equeue_stub::deferred_cb_cntx = event;
-        }
+        mbed_equeue_stub::deferred_cb      = cb;
+        mbed_equeue_stub::deferred_cb_cntx = event;
+    }
 #if 0
         free(event);
 #endif
-        return 1; //Fake ID for calling cancel
 
-    }
-    return 0;
+    return mbed_equeue_stub::deferred_call_return_value;
 }
 
 void equeue_cancel(equeue_t *queue, int id)
 {
+    EXPECT_TRUE(mbed_equeue_stub::is_cancel_armed);
+    mbed_equeue_stub::is_cancel_armed = false;
 
+    EXPECT_EQ(mbed_equeue_stub::cancel_id, id);
 }
 
 void equeue_background(equeue_t *queue,

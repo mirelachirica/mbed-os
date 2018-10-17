@@ -317,8 +317,6 @@ void self_iniated_request_tx(const uint8_t  *tx_buf,
                              MockFileHandle &fh,
                              SigIo          &sig_io)
 {
-    mbed_equeue_stub::call_in_within_call_context = false;
-
     /* Write the complete request frame in the do...while. */
 
     uint8_t tx_count = 0;
@@ -397,8 +395,7 @@ void peer_iniated_request_rx_full_frame_tx(FlagSequenceOctetReadType read_type,
                                            MockFileHandle           &fh,
                                            SigIo                    &sig_io)
 {
-    mbed_equeue_stub::call_in_within_call_context = false;
-    uint8_t rx_count                              = 0;
+    uint8_t rx_count = 0;
 
     /* Guard against internal logic error. */
     EXPECT_FALSE((read_type == READ_FLAG_SEQUENCE_OCTET) && (strip_flag_field_type == STRIP_FLAG_FIELD_YES));
@@ -526,8 +523,6 @@ void self_iniated_response_rx(const uint8_t            *rx_buf,
                               MockFileHandle           &fh,
                               SigIo                    &sig_io)
 {
-    mbed_equeue_stub::call_in_within_call_context = false;
-
     /* Guard against internal logic error. */
     EXPECT_FALSE((read_type == READ_FLAG_SEQUENCE_OCTET) && (strip_flag_field_type == STRIP_FLAG_FIELD_YES));
 

@@ -17,17 +17,16 @@
 #ifndef __EQUEUE_STUB_H__
 #define __EQUEUE_STUB_H__
 
-typedef void (*mbed_equeue_stub_cb_func_t)(void*); 
+typedef void (*mbed_equeue_stub_cb_func_t)(void*);
 
 namespace mbed_equeue_stub {
-extern bool call_in_within_call_context;
 extern bool is_delay_called;
 extern mbed_equeue_stub_cb_func_t timer_cb;
 extern mbed_equeue_stub_cb_func_t deferred_cb;
 extern void *timer_cb_cntx;
 extern void *deferred_cb_cntx;
 
-void deferred_dispatch(); 
+void deferred_dispatch();
 void timer_dispatch();
 };
 

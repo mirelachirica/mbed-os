@@ -20,7 +20,6 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-bool mbed_equeue_stub::call_in_within_call_context       = true;
 bool mbed_equeue_stub::is_delay_called                   = false;
 mbed_equeue_stub_cb_func_t mbed_equeue_stub::timer_cb    = NULL;
 mbed_equeue_stub_cb_func_t mbed_equeue_stub::deferred_cb = NULL;
@@ -31,7 +30,7 @@ namespace mbed_equeue_stub {
 
 void deferred_dispatch()
 {
-printf("deferred_dispatch\r\n");
+//printf("deferred_dispatch\r\n");
     deferred_cb(deferred_cb_cntx);
 }
 
@@ -118,10 +117,6 @@ int equeue_post(equeue_t *queue, void (*cb)(void *), void *event)
 //printf("store deferred\r\n");
             mbed_equeue_stub::deferred_cb      = cb;
             mbed_equeue_stub::deferred_cb_cntx = event;
-        }
-
-        if (mbed_equeue_stub::call_in_within_call_context) {
-            cb(event);
         }
 #if 0
         free(event);

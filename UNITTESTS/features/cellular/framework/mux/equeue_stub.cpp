@@ -22,6 +22,7 @@
 #include <stdio.h>
 
 bool mbed_equeue_stub::is_call_armed                     = false;
+bool mbed_equeue_stub::is_call_in_armed                  = false;
 bool mbed_equeue_stub::is_delay_called                   = false;
 mbed_equeue_stub_cb_func_t mbed_equeue_stub::timer_cb    = NULL;
 mbed_equeue_stub_cb_func_t mbed_equeue_stub::deferred_cb = NULL;
@@ -29,6 +30,12 @@ void *mbed_equeue_stub::timer_cb_cntx                    = NULL;
 void *mbed_equeue_stub::deferred_cb_cntx                 = NULL;
 
 namespace mbed_equeue_stub {
+
+void call_in_expect()
+{
+    EXPECT_FALSE(is_call_in_armed);
+    is_call_in_armed = true;
+}
 
 void call_expect()
 {
@@ -119,13 +126,16 @@ int equeue_post(equeue_t *queue, void (*cb)(void *), void *event)
         if (mbed_equeue_stub::is_delay_called) {
             mbed_equeue_stub::is_delay_called = false;
 //printf("store timer\r\n");
+            EXPECT_TRUE(mbed_equeue_stub::is_call_in_armed);
+            mbed_equeue_stub::is_call_in_armed = false;
+
             mbed_equeue_stub::timer_cb        = cb;
             mbed_equeue_stub::timer_cb_cntx   = event;
         } else {
 //printf("store deferred\r\n");
             EXPECT_TRUE(mbed_equeue_stub::is_call_armed);
+            mbed_equeue_stub::is_call_armed = false;
 
-            mbed_equeue_stub::is_call_armed    = false;
             mbed_equeue_stub::deferred_cb      = cb;
             mbed_equeue_stub::deferred_cb_cntx = event;
         }

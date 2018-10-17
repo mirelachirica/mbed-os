@@ -334,13 +334,7 @@ void self_iniated_request_tx(const uint8_t  *tx_buf,
 
         if (tx_count == tx_buf_len - 1) {
             /* Start frame write sequence gets completed, now start T1 timer. */
-#if 0
-            mock_t * mock_call_in = mock_free_get("call_in");
-            CHECK(mock_call_in != NULL);
-            mock_call_in->return_value = T1_TIMER_EVENT_ID;
-            mock_call_in->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
-            mock_call_in->input_param[0].param        = T1_TIMER_VALUE;
-#endif
+            mbed_equeue_stub::call_in_expect();
         } else {
             /* End the write cycle after successfull write made above in this loop. */
             FileWrite write_2(&(tx_buf[tx_count + 1u]), (tx_buf_len - (tx_count + 1u)), 0);
@@ -467,13 +461,7 @@ ASSERT_TRUE(false); // @todo: implement me
 
     /* Start the T1 timer for the new TX sequence. */
     if (start_timer == START_TIMER_YES) {
-#if 0
-        mock_t * mock_start = mock_free_get("call_in");
-        CHECK(mock_start != NULL);
-        mock_start->return_value                = T1_TIMER_EVENT_ID;
-        mock_start->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
-        mock_start->input_param[0].param        = T1_TIMER_VALUE;
-#endif
+        mbed_equeue_stub::call_in_expect();
     }
 
     /* RX frame completed, start the response frame TX sequence inside the current RX cycle. */

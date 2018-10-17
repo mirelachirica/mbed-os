@@ -23,6 +23,7 @@
 
 bool mbed_equeue_stub::is_call_armed                     = false;
 bool mbed_equeue_stub::is_call_in_armed                  = false;
+int mbed_equeue_stub::is_call_in_ms                      = 0;
 bool mbed_equeue_stub::is_delay_called                   = false;
 mbed_equeue_stub_cb_func_t mbed_equeue_stub::timer_cb    = NULL;
 mbed_equeue_stub_cb_func_t mbed_equeue_stub::deferred_cb = NULL;
@@ -31,9 +32,11 @@ void *mbed_equeue_stub::deferred_cb_cntx                 = NULL;
 
 namespace mbed_equeue_stub {
 
-void call_in_expect()
+void call_in_expect(int ms)
 {
     EXPECT_FALSE(is_call_in_armed);
+
+    is_call_in_ms    = ms;
     is_call_in_armed = true;
 }
 
@@ -105,6 +108,7 @@ void equeue_dealloc(equeue_t *queue, void *event)
 
 void equeue_event_delay(void *event, int ms)
 {
+    EXPECT_EQ(mbed_equeue_stub::is_call_in_ms, ms);
     mbed_equeue_stub::is_delay_called = true;
 }
 
@@ -166,6 +170,6 @@ void equeue_chain(equeue_t *queue, equeue_t *target)
 
 int equeue_call_in(equeue_t *q, int ms, void (*cb)(void*), void *data) {
 //printf("equeue_call_in\r\n");
-    // The stub does not implement the delay mechanism.
+
     return equeue_post(q, cb, data);
 }

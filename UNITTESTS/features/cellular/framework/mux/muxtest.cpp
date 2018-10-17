@@ -334,7 +334,7 @@ void self_iniated_request_tx(const uint8_t  *tx_buf,
 
         if (tx_count == tx_buf_len - 1) {
             /* Start frame write sequence gets completed, now start T1 timer. */
-            mbed_equeue_stub::call_in_expect();
+            mbed_equeue_stub::call_in_expect(T1_TIMER_VALUE);
         } else {
             /* End the write cycle after successfull write made above in this loop. */
             FileWrite write_2(&(tx_buf[tx_count + 1u]), (tx_buf_len - (tx_count + 1u)), 0);
@@ -461,7 +461,7 @@ ASSERT_TRUE(false); // @todo: implement me
 
     /* Start the T1 timer for the new TX sequence. */
     if (start_timer == START_TIMER_YES) {
-        mbed_equeue_stub::call_in_expect();
+        mbed_equeue_stub::call_in_expect(T1_TIMER_VALUE);
     }
 
     /* RX frame completed, start the response frame TX sequence inside the current RX cycle. */

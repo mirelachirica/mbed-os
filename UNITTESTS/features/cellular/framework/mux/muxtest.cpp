@@ -749,7 +749,7 @@ TEST_F(TestMux, channel_open_mux_not_open)
  * Expected outcome:
  * - As specified above
  */
-TEST(MultiplexerOpenTestGroup, channel_open_mux_open_currently_running)
+TEST_F(TestMux, channel_open_mux_open_currently_running)
 {
     InSequence dummy;
 
@@ -870,9 +870,351 @@ TEST(MultiplexerOpenTestGroup, channel_open_mux_open_currently_running)
 
     /* Start test sequence. */
     channel_open_err = obj.channel_open();
-    CHECK_EQUAL(NSAPI_ERROR_OK, channel_open_err);
+    EXPECT_EQ(NSAPI_ERROR_OK, channel_open_err);
 
     /* Issue new channel open, while previous one is still running. */
     channel_open_err = obj.channel_open();
-    CHECK_EQUAL(NSAPI_ERROR_IN_PROGRESS, channel_open_err);
+    EXPECT_EQ(NSAPI_ERROR_IN_PROGRESS, channel_open_err);
+}
+
+
+/*
+ * LOOP UNTIL COMPLETE REQUEST FRAME READ DONE
+ * - trigger sigio callback from FileHandleMock
+ * - enqueue deferred call to EventQueue
+ * - CALL RETURN
+ * - trigger deferred call from EventQueueMock
+ * - call read
+ * - begin response frame TX sequence in the last iteration if parameter supplied
+ * - call read
+ * - CALL RETURN
+ */
+void peer_iniated_request_rx(const uint8_t            *rx_buf,
+                             FlagSequenceOctetReadType read_type,
+                             const uint8_t            *resp_write_byte,
+                             const uint8_t            *current_tx_write_byte,
+                             uint8_t                   current_tx_write_byte_len,
+                             MockFileHandle           &fh,
+                             SigIo                    &sig_io)
+{
+    /* Internal logic error if both supplied params are != NULL. */
+    EXPECT_FALSE((resp_write_byte != NULL) && (current_tx_write_byte != NULL));
+
+    /* Phase 1: read frame start flag. */
+
+    uint8_t rx_count = 0;
+
+    /* Enqueue deferred call to EventQueue.
+     * Trigger sigio callback from the Filehandle used by the Mux3GPP (component under test). */
+    mbed_equeue_stub::call_expect(1);
+    sig_io.dispatch();
+
+    if (read_type == READ_FLAG_SEQUENCE_OCTET) {
+        /* Phase 1: read frame start flag. */
+        FileRead read(&(rx_buf[rx_count]), FLAG_SEQUENCE_OCTET_LEN, 1);
+        EXPECT_CALL(fh, read(NotNull(), FLAG_SEQUENCE_OCTET_LEN))
+                    .WillOnce(Invoke(&read, &FileRead::read)).RetiresOnSaturation();
+
+        ++rx_count;
+    }
+
+    /* Phase 2: read next 3 bytes 1-byte at a time. */
+    uint8_t read_len        = FRAME_HEADER_READ_LEN;
+    FileRead *file_read_hdr = new FileRead[read_len];
+    ASSERT_TRUE(file_read_hdr != NULL);
+    do {
+        /* Continue read cycle within current context. */
+        file_read_hdr[read_len - 1].set(&(rx_buf[rx_count]), read_len, 1);
+        EXPECT_CALL(fh, read(NotNull(), read_len)).WillOnce(Invoke(&(file_read_hdr[read_len - 1]),
+                                                            &FileRead::read)).RetiresOnSaturation();
+
+        ++rx_count;
+        --read_len;
+    } while (read_len != 0);
+
+    /* Phase 3: read trailing bytes after decoding length field 1-byte at a time. */
+    read_len                    = FRAME_TRAILER_LEN;
+    FileRead *file_read_trailer = new FileRead[read_len];
+    ASSERT_TRUE(file_read_trailer != NULL);
+    do {
+        /* Continue read cycle within current context. */
+        file_read_trailer[read_len - 1].set(&(rx_buf[rx_count]), read_len, 1);
+        EXPECT_CALL(fh, read(NotNull(), read_len)).WillOnce(Invoke(&(file_read_trailer[read_len - 1]),
+                                                            &FileRead::read)).RetiresOnSaturation();
+
+        ++rx_count;
+        --read_len;
+    } while (read_len != 0);
+
+    /* Resume the Rx cycle and stop it. */
+
+    if (resp_write_byte != NULL)  {
+        /* RX frame completed, start the response frame TX sequence inside the current RX cycle. */
+
+        const uint8_t length_of_frame = 4u + (resp_write_byte[3] & ~1) + 2u; // @todo: FIX ME: magic numbers.
+
+        FileWrite write_1(&(resp_write_byte[0]), length_of_frame, 1);
+        EXPECT_CALL(fh, write(NotNull(), length_of_frame))
+                    .WillOnce(Invoke(&write_1, &FileWrite::write)).RetiresOnSaturation();
+
+        /* End TX sequence: this call orginates from tx_internal_resp_entry_run(). */
+        FileWrite write_2(&(resp_write_byte[1]), (length_of_frame - 1u), 0);
+        EXPECT_CALL(fh, write(NotNull(), (length_of_frame - 1u)))
+                    .WillOnce(Invoke(&write_2, &FileWrite::write)).RetiresOnSaturation();
+
+        /* Resume the Rx cycle and stop it. */
+        EXPECT_CALL(fh, read(NotNull(), FRAME_HEADER_READ_LEN)).WillOnce(Return(-EAGAIN)).RetiresOnSaturation();
+
+        /* End TX sequence: this call orginates from on_deferred_call(). */
+        FileWrite write_3(&(resp_write_byte[1]), (length_of_frame - 1u), 0);
+        EXPECT_CALL(fh, write(NotNull(), (length_of_frame - 1u)))
+                    .WillOnce(Invoke(&write_3, &FileWrite::write)).RetiresOnSaturation();
+    } else if (current_tx_write_byte != NULL) {
+ASSERT_TRUE(false);
+        /* End TX sequence for the current byte in the TX pipeline: this call originates from on_deferred_call(). */
+        FileWrite write(&(current_tx_write_byte[0]), current_tx_write_byte_len, 0);
+        EXPECT_CALL(fh, write(NotNull(), current_tx_write_byte_len))
+                    .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
+#if 0
+        mock_write = mock_free_get("write");
+        CHECK(mock_write != NULL);
+        mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+        mock_write->input_param[0].param        = (uint32_t)&(current_tx_write_byte[0]);
+        mock_write->input_param[1].param        = current_tx_write_byte_len;
+        mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+        mock_write->return_value                = 0;
+#endif
+    } else {
+        /* No implementation required. */
+ASSERT_TRUE(false);
+    }
+
+    mbed_equeue_stub::deferred_dispatch();
+
+    delete [] file_read_hdr;
+    delete [] file_read_trailer;
+}
+
+
+/*
+ * LOOP UNTIL COMPLETE RESPONSE FRAME WRITE DONE
+ * - trigger sigio callback from FileHandleMock
+ * - enqueue deferred call to EventQueue
+ * - CALL RETURN
+ * - trigger deferred call from EventQueueMock
+ * - call read
+ * - call write
+ * - verify completion callback state in the last iteration, if supplied
+ * - write 1st byte of new pending frame in the last iteration, if supplied
+ * - CALL RETURN
+ */
+typedef bool (*compare_func_t)();
+void peer_iniated_response_tx(const uint8_t  *buf,
+                              uint8_t         buf_len,
+                              const uint8_t  *new_tx_byte,
+                              bool            expected_state,
+                              compare_func_t  func,
+                              MockFileHandle &fh,
+                              SigIo          &sig_io)
+{
+    uint8_t tx_count = 0;
+
+    /* Write the complete response frame in do...while. */
+    do {
+        /* Enqueue deferred call to EventQueue.
+         * Trigger sigio callback from the Filehandle used by the Mux3GPP (component under test). */
+        mbed_equeue_stub::call_expect(1);
+        sig_io.dispatch();
+
+        /* Nothing to read. */
+        EXPECT_CALL(fh, read(NotNull(), FRAME_HEADER_READ_LEN)).WillOnce(Return(-EAGAIN)).RetiresOnSaturation();
+
+        FileWrite write_1(&(buf[tx_count]), (buf_len - tx_count), 1);
+        EXPECT_CALL(fh, write(NotNull(), (buf_len - tx_count)))
+                    .WillOnce(Invoke(&write_1, &FileWrite::write)).RetiresOnSaturation();
+
+        if (tx_count == (buf_len - 1)) {
+            if (new_tx_byte != NULL) {
+                /* Last byte of the response frame written, write 1st byte of new pending frame. */
+
+                const uint8_t length_of_frame = 4u + (new_tx_byte[3] & ~1) + 2u; // @todo: FIX ME: magic numbers.
+
+                FileWrite write_2(&(new_tx_byte[0]), length_of_frame, 1);
+                EXPECT_CALL(fh, write(NotNull(), length_of_frame))
+                            .WillOnce(Invoke(&write_2, &FileWrite::write)).RetiresOnSaturation();
+
+                /* End TX cycle. */
+                EXPECT_CALL(fh, write(NotNull(), (length_of_frame - 1u)))
+                            .WillOnce(Return(0)).RetiresOnSaturation();
+            }
+        } else {
+            /* End TX cycle. */
+            EXPECT_CALL(fh, write(NotNull(), buf_len - (tx_count + 1u)))
+                        .WillOnce(Return(0)).RetiresOnSaturation();
+        }
+
+        mbed_equeue_stub::deferred_dispatch();
+
+        if (tx_count == (buf_len - 1)) {
+            if (func != NULL) {
+                /* Last byte of the response frame written, verify correct completion callback state. */
+                EXPECT_EQ(func(), expected_state);
+            }
+        }
+
+        ++tx_count;
+    } while (tx_count != buf_len);
+}
+
+
+/*
+ * TC - Ensure proper behaviour when multiplexer control channel open is requested and DM TX is currently running
+ *
+ * Test sequence:
+ * - Receive DISC command to DLCI 0
+ * - Start sending DM response message, but do not finish it
+ * - Issue channel_open API call => accepted with NSAPI_ERROR_OK
+ * -- operation set as pending, as TX DM allready inprogress
+ * - Issue new channel_open API call => fails with NSAPI_ERROR_IN_PROGRESS
+ * - Finish sending DM response message
+ * - Start sending pending open multiplexer control channel request message
+ * - Receive open multiplexer control channel response message
+ * - Send open user channel request message
+ * - Receive open user channel response message
+ * - Generate channel open callback with a valid FileHandle
+ *
+ * Expected outcome:
+ * - As specified above
+ */
+TEST_F(TestMux, mux_open_dm_tx_currently_running)
+{
+    InSequence dummy;
+
+    mbed::Mux3GPP obj;
+
+    events::EventQueue eq;
+    obj.eventqueue_attach(&eq);
+
+    MockFileHandle fh;
+    SigIo          sig_io;
+    EXPECT_CALL(fh, sigio(_)).Times(1).WillOnce(Invoke(&sig_io, &SigIo::sigio));
+    EXPECT_CALL(fh, set_blocking(false)).WillOnce(Return(0));
+
+    obj.serial_attach(&fh);
+
+    MuxCallbackTest callback;
+    obj.callback_attach(mbed::Callback<void(mbed::MuxBase::event_context_t &)>(&callback,
+                        &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
+
+    const uint8_t dlci_id      = 0;
+    const uint8_t read_byte[6] =
+    {
+        FLAG_SEQUENCE_OCTET,
+        /* Peer assumes the role of initiator. */
+        3u | (dlci_id << 2),
+        (FRAME_TYPE_DISC | PF_BIT),
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&read_byte[1], 3),
+        FLAG_SEQUENCE_OCTET
+    };
+
+    /* Generate DISC from peer and trigger TX of DM response, do not finish it. */
+
+    const uint8_t write_byte_dm[6] =
+    {
+        FLAG_SEQUENCE_OCTET,
+        3u | (dlci_id << 2),
+        (FRAME_TYPE_DM | PF_BIT),
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&write_byte_dm[1], 3),
+        FLAG_SEQUENCE_OCTET
+    };
+    peer_iniated_request_rx(&(read_byte[0]), READ_FLAG_SEQUENCE_OCTET, &(write_byte_dm[0]), NULL, 0, fh, sig_io);
+
+    /* Issue channel_open API call, operation set as pending, as TX DM allready inprogress. */
+
+    /* Start test sequence. */
+    nsapi_error channel_open_err = obj.channel_open();
+    EXPECT_EQ(NSAPI_ERROR_OK, channel_open_err);
+
+    /* Issue new channel open, while pending exists. */
+
+    channel_open_err = obj.channel_open();
+    EXPECT_EQ(NSAPI_ERROR_IN_PROGRESS, channel_open_err);
+
+    /* Finish sending DM response message and start TX of 1st byte of the pending open multiplexer control channel
+     * request message. */
+
+    const uint8_t write_byte_mux_open[6] =
+    {
+        FLAG_SEQUENCE_OCTET,
+        ADDRESS_MUX_START_REQ_OCTET,
+        (FRAME_TYPE_SABM | PF_BIT),
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&write_byte_mux_open[1], 3),
+        FLAG_SEQUENCE_OCTET
+    };
+    peer_iniated_response_tx(&(write_byte_dm[1]),
+                             (DM_FRAME_LEN -1u),
+                             &(write_byte_mux_open[0]),
+                             false,
+                             NULL,
+                             fh,
+                             sig_io);
+
+    /* Finish sending open multiplexer control channel request message, receive open multiplexer control channel
+     * response message, which starts the user channel creation procedure. */
+
+    const uint8_t read_byte_mux_open[5] =
+    {
+        ADDRESS_MUX_START_RESP_OCTET,
+        (FRAME_TYPE_UA | PF_BIT),
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&read_byte_mux_open[0], 3),
+        FLAG_SEQUENCE_OCTET
+    };
+    self_iniated_request_tx(&(write_byte_mux_open[1]),
+                            (sizeof(write_byte_mux_open) - sizeof(write_byte_mux_open[0])),
+                            FRAME_HEADER_READ_LEN,
+                            fh,
+                            sig_io);
+
+    const uint32_t address_1st_channel_open = (3u) | (1u << 2);
+    uint8_t write_byte_1st_channel_open[6]  =
+    {
+        FLAG_SEQUENCE_OCTET,
+        address_1st_channel_open,
+        (FRAME_TYPE_SABM | PF_BIT),
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&write_byte_1st_channel_open[1], 3),
+        FLAG_SEQUENCE_OCTET
+    };
+    peer_iniated_request_rx_full_frame_tx(SKIP_FLAG_SEQUENCE_OCTET, STRIP_FLAG_FIELD_NO,
+                                          &(read_byte_mux_open[0]), sizeof(read_byte_mux_open),
+                                          &(write_byte_1st_channel_open[0]), sizeof(write_byte_1st_channel_open),
+                                          CANCEL_TIMER_YES, START_TIMER_YES,
+                                          fh, sig_io);
+
+    /* Receive open user channel response message. */
+
+    callback.callback_arm();
+    const uint8_t read_byte_channel_open[5]  =
+    {
+        (3u | (1u << 2)),
+        (FRAME_TYPE_UA | PF_BIT),
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&read_byte_channel_open[0], 3),
+        FLAG_SEQUENCE_OCTET
+    };
+    self_iniated_response_rx(&(read_byte_channel_open[0]),
+                             NULL,
+                             SKIP_FLAG_SEQUENCE_OCTET,
+                             STRIP_FLAG_FIELD_NO,
+                             ENQUEUE_DEFERRED_CALL_YES,
+                             fh,
+                             sig_io);
+
+    /* Validate Filehandle generation. */
+    EXPECT_TRUE(callback.is_callback_called());
+    EXPECT_TRUE(callback.file_handle_get() != NULL);
 }

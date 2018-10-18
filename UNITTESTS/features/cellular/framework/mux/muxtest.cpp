@@ -784,8 +784,8 @@ ASSERT_TRUE(false);
         mock_write->return_value                = 0;
 #endif
     } else {
-        /* No implementation required. */
-ASSERT_TRUE(false);
+        /* Resume the Rx cycle and stop it. */
+        EXPECT_CALL(fh, read(NotNull(), FRAME_HEADER_READ_LEN)).WillOnce(Return(-EAGAIN)).RetiresOnSaturation();
     }
 
     mbed_equeue_stub::deferred_dispatch();
@@ -1413,4 +1413,47 @@ TEST_F(TestMux, channel_open_mux_open_success_after_timeout)
     /* Validate Filehandle generation. */
     EXPECT_TRUE(callback.is_callback_called());
     EXPECT_TRUE(callback.file_handle_get() != NULL);
+}
+
+
+/*
+ * TC - Ensure proper behaviour when multiplexer control channel open request is recieved from the peer
+ *
+ * Test sequence:
+ * - Receive open multiplexer control channel request message
+ *
+ * Expected outcome:
+ * - No action taken by the implementation: received open multiplexer control channel request message silently discarded
+ */
+TEST_F(TestMux,  mux_open_peer_initiated)
+{
+    InSequence dummy;
+
+    mbed::Mux3GPP obj;
+
+    events::EventQueue eq;
+    obj.eventqueue_attach(&eq);
+
+    MockFileHandle fh;
+    SigIo          sig_io;
+    EXPECT_CALL(fh, sigio(_)).Times(1).WillOnce(Invoke(&sig_io, &SigIo::sigio));
+    EXPECT_CALL(fh, set_blocking(false)).WillOnce(Return(0));
+
+    obj.serial_attach(&fh);
+
+    MuxCallbackTest callback;
+    obj.callback_attach(mbed::Callback<void(mbed::MuxBase::event_context_t &)>(&callback,
+                        &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
+
+    const uint8_t read_byte[6] =
+    {
+        FLAG_SEQUENCE_OCTET,
+        ADDRESS_MUX_START_REQ_OCTET,
+        (FRAME_TYPE_SABM | PF_BIT),
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&read_byte[1], 3),
+        FLAG_SEQUENCE_OCTET
+    };
+
+    peer_iniated_request_rx(&(read_byte[0]), READ_FLAG_SEQUENCE_OCTET, NULL, NULL, 0, fh, sig_io);
 }

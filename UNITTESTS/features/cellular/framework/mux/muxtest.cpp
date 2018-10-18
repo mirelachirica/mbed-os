@@ -1218,3 +1218,113 @@ TEST_F(TestMux, mux_open_dm_tx_currently_running)
     EXPECT_TRUE(callback.is_callback_called());
     EXPECT_TRUE(callback.file_handle_get() != NULL);
 }
+
+
+void mux_self_iniated_open_rx_frame_sync_done(MuxCallbackTest &callback,
+                                              uint8_t          frame_type,
+                                              mbed::Mux3GPP   &mux,
+                                              MockFileHandle  &fh,
+                                              SigIo           &sig_io)
+{
+    mux_self_iniated_open(FRAME_HEADER_READ_LEN,
+                          SKIP_FLAG_SEQUENCE_OCTET,
+                          STRIP_FLAG_FIELD_YES,
+                          callback,
+                          frame_type,
+                          mux,
+                          fh,
+                          sig_io);
+}
+
+
+/*
+ * TC - Ensure proper behaviour when multiplexer control channel open request is rejected by the peer
+ *
+ * Test sequence:
+ * - Send open multiplexer control channel request message
+ * - Peer rejects open multiplexer control channel request message with appropriate response message
+ * - Send open multiplexer control channel request message
+ * - Receive open multiplexer control channel response message
+ * - Send open user channel request message
+ * - Receive open user channel response message
+ * - Generate channel open callback with a valid FileHandle
+ *
+ * Expected outcome:
+ * - As specified above
+ */
+TEST_F(TestMux, channel_open_mux_open_rejected_by_peer)
+{
+    InSequence dummy;
+
+    mbed::Mux3GPP obj;
+
+    events::EventQueue eq;
+    obj.eventqueue_attach(&eq);
+
+    MockFileHandle fh;
+    SigIo          sig_io;
+    EXPECT_CALL(fh, sigio(_)).Times(1).WillOnce(Invoke(&sig_io, &SigIo::sigio));
+    EXPECT_CALL(fh, set_blocking(false)).WillOnce(Return(0));
+
+    obj.serial_attach(&fh);
+
+    MuxCallbackTest callback;
+    obj.callback_attach(mbed::Callback<void(mbed::MuxBase::event_context_t &)>(&callback,
+                        &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
+
+    const uint8_t write_byte_mux_open[6] =
+    {
+        FLAG_SEQUENCE_OCTET,
+        ADDRESS_MUX_START_REQ_OCTET,
+        (FRAME_TYPE_SABM | PF_BIT),
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&write_byte_mux_open[1], 3),
+        FLAG_SEQUENCE_OCTET
+    };
+
+    FileWrite write(&(write_byte_mux_open[0]), sizeof(write_byte_mux_open), 1);
+    EXPECT_CALL(fh, write(NotNull(), sizeof(write_byte_mux_open)))
+                .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
+    /* End TX cycle. */
+    EXPECT_CALL(fh, write(NotNull(), sizeof(write_byte_mux_open) - sizeof(write_byte_mux_open[0])))
+                .WillOnce(Return(0)).RetiresOnSaturation();
+
+    /* Start test sequence. Test set mocks. */
+    const nsapi_error channel_open_err = obj.channel_open();
+    EXPECT_EQ(NSAPI_ERROR_OK, channel_open_err);
+
+    /* Finish the frame write sequence. */
+    self_iniated_request_tx(&(write_byte_mux_open[1]), (SABM_FRAME_LEN - 1u), FLAG_SEQUENCE_OCTET_LEN, fh, sig_io);
+
+    /* Peer rejects open multiplexer control channel request message with appropriate response message. */
+
+    const uint8_t read_byte_mux_open[6] =
+    {
+        FLAG_SEQUENCE_OCTET,
+        ADDRESS_MUX_START_RESP_OCTET,
+        (FRAME_TYPE_DM | PF_BIT),
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&read_byte_mux_open[1], 3),
+        FLAG_SEQUENCE_OCTET
+    };
+    callback.callback_arm();
+    self_iniated_response_rx(&(read_byte_mux_open[0]),
+                             NULL,
+                             READ_FLAG_SEQUENCE_OCTET,
+                             STRIP_FLAG_FIELD_NO,
+                             ENQUEUE_DEFERRED_CALL_YES,
+                             fh,
+                             sig_io);
+
+    /* Validate Filehandle generation. */
+    EXPECT_TRUE(callback.is_callback_called());
+    EXPECT_EQ(NULL, callback.file_handle_get());
+
+    /* Open multiplexer control channel and user channel. */
+
+    mux_self_iniated_open_rx_frame_sync_done(callback, FRAME_TYPE_UA);
+
+    /* Validate Filehandle generation. */
+    EXPECT_TRUE(callback.is_callback_called());
+    EXPECT_TRUE(callback.file_handle_get() != NULL);
+}

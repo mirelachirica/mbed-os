@@ -689,6 +689,195 @@ void mux_self_iniated_open(MuxCallbackTest &callback,
 
 
 /*
+ * LOOP UNTIL COMPLETE REQUEST FRAME READ DONE
+ * - trigger sigio callback from FileHandleMock
+ * - enqueue deferred call to EventQueue
+ * - CALL RETURN
+ * - trigger deferred call from EventQueueMock
+ * - call read
+ * - begin response frame TX sequence in the last iteration if parameter supplied
+ * - call read
+ * - CALL RETURN
+ */
+void peer_iniated_request_rx(const uint8_t            *rx_buf,
+                             FlagSequenceOctetReadType read_type,
+                             const uint8_t            *resp_write_byte,
+                             const uint8_t            *current_tx_write_byte,
+                             uint8_t                   current_tx_write_byte_len,
+                             MockFileHandle           &fh,
+                             SigIo                    &sig_io)
+{
+    /* Internal logic error if both supplied params are != NULL. */
+    EXPECT_FALSE((resp_write_byte != NULL) && (current_tx_write_byte != NULL));
+
+    /* Phase 1: read frame start flag. */
+
+    uint8_t rx_count = 0;
+
+    /* Enqueue deferred call to EventQueue.
+     * Trigger sigio callback from the Filehandle used by the Mux3GPP (component under test). */
+    mbed_equeue_stub::call_expect(1);
+    sig_io.dispatch();
+
+    if (read_type == READ_FLAG_SEQUENCE_OCTET) {
+        /* Phase 1: read frame start flag. */
+        FileRead read(&(rx_buf[rx_count]), FLAG_SEQUENCE_OCTET_LEN, 1);
+        EXPECT_CALL(fh, read(NotNull(), FLAG_SEQUENCE_OCTET_LEN))
+                    .WillOnce(Invoke(&read, &FileRead::read)).RetiresOnSaturation();
+
+        ++rx_count;
+    }
+
+    /* Phase 2: read next 3 bytes 1-byte at a time. */
+    uint8_t read_len        = FRAME_HEADER_READ_LEN;
+    FileRead *file_read_hdr = new FileRead[read_len];
+    ASSERT_TRUE(file_read_hdr != NULL);
+    do {
+        /* Continue read cycle within current context. */
+        file_read_hdr[read_len - 1].set(&(rx_buf[rx_count]), read_len, 1);
+        EXPECT_CALL(fh, read(NotNull(), read_len)).WillOnce(Invoke(&(file_read_hdr[read_len - 1]),
+                                                            &FileRead::read)).RetiresOnSaturation();
+
+        ++rx_count;
+        --read_len;
+    } while (read_len != 0);
+
+    /* Phase 3: read trailing bytes after decoding length field 1-byte at a time. */
+    read_len                    = FRAME_TRAILER_LEN;
+    FileRead *file_read_trailer = new FileRead[read_len];
+    ASSERT_TRUE(file_read_trailer != NULL);
+    do {
+        /* Continue read cycle within current context. */
+        file_read_trailer[read_len - 1].set(&(rx_buf[rx_count]), read_len, 1);
+        EXPECT_CALL(fh, read(NotNull(), read_len)).WillOnce(Invoke(&(file_read_trailer[read_len - 1]),
+                                                            &FileRead::read)).RetiresOnSaturation();
+
+        ++rx_count;
+        --read_len;
+    } while (read_len != 0);
+
+    /* Resume the Rx cycle and stop it. */
+
+    if (resp_write_byte != NULL)  {
+        /* RX frame completed, start the response frame TX sequence inside the current RX cycle. */
+
+        const uint8_t length_of_frame = 4u + (resp_write_byte[3] & ~1) + 2u; // @todo: FIX ME: magic numbers.
+
+        FileWrite write_1(&(resp_write_byte[0]), length_of_frame, 1);
+        EXPECT_CALL(fh, write(NotNull(), length_of_frame))
+                    .WillOnce(Invoke(&write_1, &FileWrite::write)).RetiresOnSaturation();
+
+        /* End TX sequence: this call orginates from tx_internal_resp_entry_run(). */
+        FileWrite write_2(&(resp_write_byte[1]), (length_of_frame - 1u), 0);
+        EXPECT_CALL(fh, write(NotNull(), (length_of_frame - 1u)))
+                    .WillOnce(Invoke(&write_2, &FileWrite::write)).RetiresOnSaturation();
+
+        /* Resume the Rx cycle and stop it. */
+        EXPECT_CALL(fh, read(NotNull(), FRAME_HEADER_READ_LEN)).WillOnce(Return(-EAGAIN)).RetiresOnSaturation();
+
+        /* End TX sequence: this call orginates from on_deferred_call(). */
+        FileWrite write_3(&(resp_write_byte[1]), (length_of_frame - 1u), 0);
+        EXPECT_CALL(fh, write(NotNull(), (length_of_frame - 1u)))
+                    .WillOnce(Invoke(&write_3, &FileWrite::write)).RetiresOnSaturation();
+    } else if (current_tx_write_byte != NULL) {
+ASSERT_TRUE(false);
+        /* End TX sequence for the current byte in the TX pipeline: this call originates from on_deferred_call(). */
+        FileWrite write(&(current_tx_write_byte[0]), current_tx_write_byte_len, 0);
+        EXPECT_CALL(fh, write(NotNull(), current_tx_write_byte_len))
+                    .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
+#if 0
+        mock_write = mock_free_get("write");
+        CHECK(mock_write != NULL);
+        mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
+        mock_write->input_param[0].param        = (uint32_t)&(current_tx_write_byte[0]);
+        mock_write->input_param[1].param        = current_tx_write_byte_len;
+        mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
+        mock_write->return_value                = 0;
+#endif
+    } else {
+        /* No implementation required. */
+ASSERT_TRUE(false);
+    }
+
+    mbed_equeue_stub::deferred_dispatch();
+
+    delete [] file_read_hdr;
+    delete [] file_read_trailer;
+}
+
+
+/*
+ * LOOP UNTIL COMPLETE RESPONSE FRAME WRITE DONE
+ * - trigger sigio callback from FileHandleMock
+ * - enqueue deferred call to EventQueue
+ * - CALL RETURN
+ * - trigger deferred call from EventQueueMock
+ * - call read
+ * - call write
+ * - verify completion callback state in the last iteration, if supplied
+ * - write 1st byte of new pending frame in the last iteration, if supplied
+ * - CALL RETURN
+ */
+typedef bool (*compare_func_t)();
+void peer_iniated_response_tx(const uint8_t  *buf,
+                              uint8_t         buf_len,
+                              const uint8_t  *new_tx_byte,
+                              bool            expected_state,
+                              compare_func_t  func,
+                              MockFileHandle &fh,
+                              SigIo          &sig_io)
+{
+    uint8_t tx_count = 0;
+
+    /* Write the complete response frame in do...while. */
+    do {
+        /* Enqueue deferred call to EventQueue.
+         * Trigger sigio callback from the Filehandle used by the Mux3GPP (component under test). */
+        mbed_equeue_stub::call_expect(1);
+        sig_io.dispatch();
+
+        /* Nothing to read. */
+        EXPECT_CALL(fh, read(NotNull(), FRAME_HEADER_READ_LEN)).WillOnce(Return(-EAGAIN)).RetiresOnSaturation();
+
+        FileWrite write_1(&(buf[tx_count]), (buf_len - tx_count), 1);
+        EXPECT_CALL(fh, write(NotNull(), (buf_len - tx_count)))
+                    .WillOnce(Invoke(&write_1, &FileWrite::write)).RetiresOnSaturation();
+
+        if (tx_count == (buf_len - 1)) {
+            if (new_tx_byte != NULL) {
+                /* Last byte of the response frame written, write 1st byte of new pending frame. */
+
+                const uint8_t length_of_frame = 4u + (new_tx_byte[3] & ~1) + 2u; // @todo: FIX ME: magic numbers.
+
+                FileWrite write_2(&(new_tx_byte[0]), length_of_frame, 1);
+                EXPECT_CALL(fh, write(NotNull(), length_of_frame))
+                            .WillOnce(Invoke(&write_2, &FileWrite::write)).RetiresOnSaturation();
+
+                /* End TX cycle. */
+                EXPECT_CALL(fh, write(NotNull(), (length_of_frame - 1u)))
+                            .WillOnce(Return(0)).RetiresOnSaturation();
+            }
+        } else {
+            /* End TX cycle. */
+            EXPECT_CALL(fh, write(NotNull(), buf_len - (tx_count + 1u)))
+                        .WillOnce(Return(0)).RetiresOnSaturation();
+        }
+
+        mbed_equeue_stub::deferred_dispatch();
+
+        if (tx_count == (buf_len - 1)) {
+            if (func != NULL) {
+                /* Last byte of the response frame written, verify correct completion callback state. */
+                EXPECT_EQ(func(), expected_state);
+            }
+        }
+
+        ++tx_count;
+    } while (tx_count != buf_len);
+}
+
+
+/*
  * TC - Ensure proper behaviour when channel is opened and multiplexer control channel is not open
  *
  * Test sequence:
@@ -875,195 +1064,6 @@ TEST_F(TestMux, channel_open_mux_open_currently_running)
     /* Issue new channel open, while previous one is still running. */
     channel_open_err = obj.channel_open();
     EXPECT_EQ(NSAPI_ERROR_IN_PROGRESS, channel_open_err);
-}
-
-
-/*
- * LOOP UNTIL COMPLETE REQUEST FRAME READ DONE
- * - trigger sigio callback from FileHandleMock
- * - enqueue deferred call to EventQueue
- * - CALL RETURN
- * - trigger deferred call from EventQueueMock
- * - call read
- * - begin response frame TX sequence in the last iteration if parameter supplied
- * - call read
- * - CALL RETURN
- */
-void peer_iniated_request_rx(const uint8_t            *rx_buf,
-                             FlagSequenceOctetReadType read_type,
-                             const uint8_t            *resp_write_byte,
-                             const uint8_t            *current_tx_write_byte,
-                             uint8_t                   current_tx_write_byte_len,
-                             MockFileHandle           &fh,
-                             SigIo                    &sig_io)
-{
-    /* Internal logic error if both supplied params are != NULL. */
-    EXPECT_FALSE((resp_write_byte != NULL) && (current_tx_write_byte != NULL));
-
-    /* Phase 1: read frame start flag. */
-
-    uint8_t rx_count = 0;
-
-    /* Enqueue deferred call to EventQueue.
-     * Trigger sigio callback from the Filehandle used by the Mux3GPP (component under test). */
-    mbed_equeue_stub::call_expect(1);
-    sig_io.dispatch();
-
-    if (read_type == READ_FLAG_SEQUENCE_OCTET) {
-        /* Phase 1: read frame start flag. */
-        FileRead read(&(rx_buf[rx_count]), FLAG_SEQUENCE_OCTET_LEN, 1);
-        EXPECT_CALL(fh, read(NotNull(), FLAG_SEQUENCE_OCTET_LEN))
-                    .WillOnce(Invoke(&read, &FileRead::read)).RetiresOnSaturation();
-
-        ++rx_count;
-    }
-
-    /* Phase 2: read next 3 bytes 1-byte at a time. */
-    uint8_t read_len        = FRAME_HEADER_READ_LEN;
-    FileRead *file_read_hdr = new FileRead[read_len];
-    ASSERT_TRUE(file_read_hdr != NULL);
-    do {
-        /* Continue read cycle within current context. */
-        file_read_hdr[read_len - 1].set(&(rx_buf[rx_count]), read_len, 1);
-        EXPECT_CALL(fh, read(NotNull(), read_len)).WillOnce(Invoke(&(file_read_hdr[read_len - 1]),
-                                                            &FileRead::read)).RetiresOnSaturation();
-
-        ++rx_count;
-        --read_len;
-    } while (read_len != 0);
-
-    /* Phase 3: read trailing bytes after decoding length field 1-byte at a time. */
-    read_len                    = FRAME_TRAILER_LEN;
-    FileRead *file_read_trailer = new FileRead[read_len];
-    ASSERT_TRUE(file_read_trailer != NULL);
-    do {
-        /* Continue read cycle within current context. */
-        file_read_trailer[read_len - 1].set(&(rx_buf[rx_count]), read_len, 1);
-        EXPECT_CALL(fh, read(NotNull(), read_len)).WillOnce(Invoke(&(file_read_trailer[read_len - 1]),
-                                                            &FileRead::read)).RetiresOnSaturation();
-
-        ++rx_count;
-        --read_len;
-    } while (read_len != 0);
-
-    /* Resume the Rx cycle and stop it. */
-
-    if (resp_write_byte != NULL)  {
-        /* RX frame completed, start the response frame TX sequence inside the current RX cycle. */
-
-        const uint8_t length_of_frame = 4u + (resp_write_byte[3] & ~1) + 2u; // @todo: FIX ME: magic numbers.
-
-        FileWrite write_1(&(resp_write_byte[0]), length_of_frame, 1);
-        EXPECT_CALL(fh, write(NotNull(), length_of_frame))
-                    .WillOnce(Invoke(&write_1, &FileWrite::write)).RetiresOnSaturation();
-
-        /* End TX sequence: this call orginates from tx_internal_resp_entry_run(). */
-        FileWrite write_2(&(resp_write_byte[1]), (length_of_frame - 1u), 0);
-        EXPECT_CALL(fh, write(NotNull(), (length_of_frame - 1u)))
-                    .WillOnce(Invoke(&write_2, &FileWrite::write)).RetiresOnSaturation();
-
-        /* Resume the Rx cycle and stop it. */
-        EXPECT_CALL(fh, read(NotNull(), FRAME_HEADER_READ_LEN)).WillOnce(Return(-EAGAIN)).RetiresOnSaturation();
-
-        /* End TX sequence: this call orginates from on_deferred_call(). */
-        FileWrite write_3(&(resp_write_byte[1]), (length_of_frame - 1u), 0);
-        EXPECT_CALL(fh, write(NotNull(), (length_of_frame - 1u)))
-                    .WillOnce(Invoke(&write_3, &FileWrite::write)).RetiresOnSaturation();
-    } else if (current_tx_write_byte != NULL) {
-ASSERT_TRUE(false);
-        /* End TX sequence for the current byte in the TX pipeline: this call originates from on_deferred_call(). */
-        FileWrite write(&(current_tx_write_byte[0]), current_tx_write_byte_len, 0);
-        EXPECT_CALL(fh, write(NotNull(), current_tx_write_byte_len))
-                    .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
-#if 0
-        mock_write = mock_free_get("write");
-        CHECK(mock_write != NULL);
-        mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
-        mock_write->input_param[0].param        = (uint32_t)&(current_tx_write_byte[0]);
-        mock_write->input_param[1].param        = current_tx_write_byte_len;
-        mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
-        mock_write->return_value                = 0;
-#endif
-    } else {
-        /* No implementation required. */
-ASSERT_TRUE(false);
-    }
-
-    mbed_equeue_stub::deferred_dispatch();
-
-    delete [] file_read_hdr;
-    delete [] file_read_trailer;
-}
-
-
-/*
- * LOOP UNTIL COMPLETE RESPONSE FRAME WRITE DONE
- * - trigger sigio callback from FileHandleMock
- * - enqueue deferred call to EventQueue
- * - CALL RETURN
- * - trigger deferred call from EventQueueMock
- * - call read
- * - call write
- * - verify completion callback state in the last iteration, if supplied
- * - write 1st byte of new pending frame in the last iteration, if supplied
- * - CALL RETURN
- */
-typedef bool (*compare_func_t)();
-void peer_iniated_response_tx(const uint8_t  *buf,
-                              uint8_t         buf_len,
-                              const uint8_t  *new_tx_byte,
-                              bool            expected_state,
-                              compare_func_t  func,
-                              MockFileHandle &fh,
-                              SigIo          &sig_io)
-{
-    uint8_t tx_count = 0;
-
-    /* Write the complete response frame in do...while. */
-    do {
-        /* Enqueue deferred call to EventQueue.
-         * Trigger sigio callback from the Filehandle used by the Mux3GPP (component under test). */
-        mbed_equeue_stub::call_expect(1);
-        sig_io.dispatch();
-
-        /* Nothing to read. */
-        EXPECT_CALL(fh, read(NotNull(), FRAME_HEADER_READ_LEN)).WillOnce(Return(-EAGAIN)).RetiresOnSaturation();
-
-        FileWrite write_1(&(buf[tx_count]), (buf_len - tx_count), 1);
-        EXPECT_CALL(fh, write(NotNull(), (buf_len - tx_count)))
-                    .WillOnce(Invoke(&write_1, &FileWrite::write)).RetiresOnSaturation();
-
-        if (tx_count == (buf_len - 1)) {
-            if (new_tx_byte != NULL) {
-                /* Last byte of the response frame written, write 1st byte of new pending frame. */
-
-                const uint8_t length_of_frame = 4u + (new_tx_byte[3] & ~1) + 2u; // @todo: FIX ME: magic numbers.
-
-                FileWrite write_2(&(new_tx_byte[0]), length_of_frame, 1);
-                EXPECT_CALL(fh, write(NotNull(), length_of_frame))
-                            .WillOnce(Invoke(&write_2, &FileWrite::write)).RetiresOnSaturation();
-
-                /* End TX cycle. */
-                EXPECT_CALL(fh, write(NotNull(), (length_of_frame - 1u)))
-                            .WillOnce(Return(0)).RetiresOnSaturation();
-            }
-        } else {
-            /* End TX cycle. */
-            EXPECT_CALL(fh, write(NotNull(), buf_len - (tx_count + 1u)))
-                        .WillOnce(Return(0)).RetiresOnSaturation();
-        }
-
-        mbed_equeue_stub::deferred_dispatch();
-
-        if (tx_count == (buf_len - 1)) {
-            if (func != NULL) {
-                /* Last byte of the response frame written, verify correct completion callback state. */
-                EXPECT_EQ(func(), expected_state);
-            }
-        }
-
-        ++tx_count;
-    } while (tx_count != buf_len);
 }
 
 

@@ -405,20 +405,9 @@ void peer_iniated_request_rx_full_frame_tx(FlagSequenceOctetReadType read_type,
     uint8_t read_len = FRAME_HEADER_READ_LEN;
     if (strip_flag_field_type == STRIP_FLAG_FIELD_YES) {
         /* Flag field present, which will be discarded by the implementation. */
-ASSERT_TRUE(false); // @todo: implement me
-#if 0
-        mock_read = mock_free_get("read");
-        CHECK(mock_read != NULL);
-        mock_read->output_param[0].param       = &(rx_buf[rx_count]);
-        mock_read->output_param[0].len         = sizeof(rx_buf[0]);
-        mock_read->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
-        mock_read->input_param[0].param        = read_len;
-        mock_read->return_value                = 1;
-
         FileRead read(&(rx_buf[rx_count]), read_len, 1);
-//        printf("TC this: 0x%08x\r\n", &read);
         EXPECT_CALL(fh, read(NotNull(), read_len)).WillOnce(Invoke(&read, &FileRead::read)).RetiresOnSaturation();
-#endif
+
         ++rx_count;
     }
 
@@ -1322,7 +1311,104 @@ TEST_F(TestMux, channel_open_mux_open_rejected_by_peer)
 
     /* Open multiplexer control channel and user channel. */
 
-    mux_self_iniated_open_rx_frame_sync_done(callback, FRAME_TYPE_UA);
+    mux_self_iniated_open_rx_frame_sync_done(callback, FRAME_TYPE_UA, obj, fh, sig_io);
+
+    /* Validate Filehandle generation. */
+    EXPECT_TRUE(callback.is_callback_called());
+    EXPECT_TRUE(callback.file_handle_get() != NULL);
+}
+
+
+/*
+ * TC - Ensure proper behaviour when multiplexer control channel open request timeouts
+ *
+ * Test sequence:
+ * - Send open multiplexer control channel request message
+ * - Generate maxium amount of timeout events, which trigger retransmission of open multiplexer control channel request
+ *   message
+ * - Once maxium retransmission limit reached, complete operation with failure to the user
+ * - Do a successfull channel open procedure
+ *
+ * Expected outcome:
+ * - As specified above
+ */
+TEST_F(TestMux, channel_open_mux_open_success_after_timeout)
+{
+    InSequence dummy;
+
+    mbed::Mux3GPP obj;
+
+    events::EventQueue eq;
+    obj.eventqueue_attach(&eq);
+
+    MockFileHandle fh;
+    SigIo          sig_io;
+    EXPECT_CALL(fh, sigio(_)).Times(1).WillOnce(Invoke(&sig_io, &SigIo::sigio));
+    EXPECT_CALL(fh, set_blocking(false)).WillOnce(Return(0));
+
+    obj.serial_attach(&fh);
+
+    MuxCallbackTest callback;
+    obj.callback_attach(mbed::Callback<void(mbed::MuxBase::event_context_t &)>(&callback,
+                        &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
+
+    const uint8_t write_byte_mux_open[6] =
+    {
+        FLAG_SEQUENCE_OCTET,
+        ADDRESS_MUX_START_REQ_OCTET,
+        (FRAME_TYPE_SABM | PF_BIT),
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&write_byte_mux_open[1], 3),
+        FLAG_SEQUENCE_OCTET
+    };
+
+    FileWrite write(&(write_byte_mux_open[0]), sizeof(write_byte_mux_open), 1);
+    EXPECT_CALL(fh, write(NotNull(), sizeof(write_byte_mux_open)))
+                .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
+    /* End TX cycle. */
+    EXPECT_CALL(fh, write(NotNull(), sizeof(write_byte_mux_open) - sizeof(write_byte_mux_open[0])))
+                .WillOnce(Return(0)).RetiresOnSaturation();
+
+    /* Start test sequence. Test set mocks. */
+    const nsapi_error channel_open_err = obj.channel_open();
+    EXPECT_EQ(NSAPI_ERROR_OK, channel_open_err);
+
+    /* Generate maxium amount of timeout events, which trigger retransmission of open multiplexer control channel
+       request message. */
+
+    /* Complete the frame write. */
+    self_iniated_request_tx(&(write_byte_mux_open[1]), (SABM_FRAME_LEN - 1u), FLAG_SEQUENCE_OCTET_LEN, fh, sig_io);
+
+    /* Begin frame re-transmit sequence.*/
+    uint8_t counter = RETRANSMIT_COUNT;
+    do {
+        FileWrite write(&(write_byte_mux_open[0]), sizeof(write_byte_mux_open), 1);
+        EXPECT_CALL(fh, write(NotNull(), sizeof(write_byte_mux_open)))
+                    .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
+        /* End TX cycle. */
+        EXPECT_CALL(fh, write(NotNull(), sizeof(write_byte_mux_open) - sizeof(write_byte_mux_open[0])))
+                    .WillOnce(Return(0)).RetiresOnSaturation();
+
+        /* Trigger timer timeout. */
+        mbed_equeue_stub::timer_dispatch();
+
+        /* Re-transmit the complete remaining part of the frame. */
+        self_iniated_request_tx(&(write_byte_mux_open[1]), (SABM_FRAME_LEN - 1u), FLAG_SEQUENCE_OCTET_LEN, fh, sig_io);
+
+        --counter;
+    } while (counter != 0);
+
+    /* Trigger timer to finish the re-transmission cycle and the whole open multiplexer control channel request. */
+    callback.callback_arm();
+    mbed_equeue_stub::timer_dispatch();
+
+    /* Validate Filehandle generation. */
+    EXPECT_TRUE(callback.is_callback_called());
+    EXPECT_EQ(NULL, callback.file_handle_get());
+
+    /* Open multiplexer control channel and user channel. */
+
+    mux_self_iniated_open(callback, FRAME_TYPE_UA, obj, fh, sig_io);
 
     /* Validate Filehandle generation. */
     EXPECT_TRUE(callback.is_callback_called());

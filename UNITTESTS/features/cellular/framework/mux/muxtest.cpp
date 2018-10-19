@@ -300,6 +300,7 @@ private:
     mbed::Callback<void()> _sigio_cb;
 };
 
+
 /*
  * LOOP UNTIL COMPLETE REQUEST FRAME WRITE DONE
  * - trigger sigio callback from FileHandleMock
@@ -582,6 +583,55 @@ ASSERT_TRUE(false); //  @todo: implement this block
     delete [] file_read_hdr;
     delete [] file_read_trailer;
 }
+
+
+void channel_open(uint8_t                 dlci,
+                  MuxCallbackTest        &callback,
+                  EnqueueDeferredCallType enqueue_deferred_call_type,
+                  mbed::Mux3GPP          &mux,
+                  MockFileHandle         &fh,
+                  SigIo                  &sig_io)
+{
+    const uint32_t address                   = (3u) | (dlci << 2);
+    const uint8_t write_byte_channel_open[6] =
+    {
+        FLAG_SEQUENCE_OCTET,
+        address,
+        (FRAME_TYPE_SABM | PF_BIT),
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&write_byte_channel_open[1], 3),
+        FLAG_SEQUENCE_OCTET
+    };
+
+    FileWrite write(&(write_byte_channel_open[0]), sizeof(write_byte_channel_open), sizeof(write_byte_channel_open));
+    EXPECT_CALL(fh, write(NotNull(), sizeof(write_byte_channel_open)))
+                .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
+
+    mbed_equeue_stub::call_in_expect(T1_TIMER_VALUE, 1);
+
+    /* Start test sequence. Test set mocks. */
+    const nsapi_error channel_open_err = mux.channel_open();
+    EXPECT_EQ(NSAPI_ERROR_OK, channel_open_err);
+
+    /* Read the channel open response frame. */
+    const uint8_t read_byte_channel_open[5]  =
+    {
+        write_byte_channel_open[1],
+        (FRAME_TYPE_UA | PF_BIT),
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&read_byte_channel_open[0], 3),
+        FLAG_SEQUENCE_OCTET
+    };
+    callback.callback_arm();
+    self_iniated_response_rx(&(read_byte_channel_open[0]),
+                             NULL,
+                             SKIP_FLAG_SEQUENCE_OCTET,
+                             STRIP_FLAG_FIELD_NO,
+                             enqueue_deferred_call_type,
+                             fh,
+                             sig_io);
+}
+
 
 /* Do successfull multiplexer self iniated open.*/
 void mux_self_iniated_open(uint8_t                   tx_cycle_read_len,
@@ -1670,6 +1720,115 @@ TEST_F(TestMux, channel_open_mux_open_tx_in_call_context)
                              ENQUEUE_DEFERRED_CALL_YES,
                              fh,
                              sig_io);
+
+    /* Validate Filehandle generation. */
+    EXPECT_TRUE(callback.is_callback_called());
+    EXPECT_TRUE(callback.file_handle_get() != NULL);
+
+    delete [] file_write;
+}
+
+
+/*
+ * TC - Ensure proper behaviour when user channel open request timeouts
+ *
+ * Test sequence:
+ * - Establish user channel
+ * - Send open user channel open request
+ * - Generate maxium amount of timeout events, which trigger retransmission of open user channel open request message
+ * - Once maxium retransmission limit reached, complete operation with failure to the user
+ * - Do a successfull user channel open procedure
+ *
+ * Expected outcome:
+ * - As specified above
+ */
+TEST_F(TestMux, channel_open_success_after_timeout)
+{
+    InSequence dummy;
+
+    mbed::Mux3GPP obj;
+
+    events::EventQueue eq;
+    obj.eventqueue_attach(&eq);
+
+    MockFileHandle fh;
+    SigIo          sig_io;
+    EXPECT_CALL(fh, sigio(_)).Times(1).WillOnce(Invoke(&sig_io, &SigIo::sigio));
+    EXPECT_CALL(fh, set_blocking(false)).WillOnce(Return(0));
+
+    obj.serial_attach(&fh);
+
+    MuxCallbackTest callback;
+    obj.callback_attach(mbed::Callback<void(mbed::MuxBase::event_context_t &)>(&callback,
+                        &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
+
+    /* Establish user channel. */
+
+    mux_self_iniated_open(callback, FRAME_TYPE_UA, obj, fh, sig_io);
+
+    /* Validate Filehandle generation. */
+    EXPECT_TRUE(callback.is_callback_called());
+    EXPECT_TRUE(callback.file_handle_get() != NULL);
+
+    const uint32_t address                   = (3u) | (2u << 2);
+    const uint8_t write_byte_channel_open[6] =
+    {
+        FLAG_SEQUENCE_OCTET,
+        address,
+        (FRAME_TYPE_SABM | PF_BIT),
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&write_byte_channel_open[1], 3),
+        FLAG_SEQUENCE_OCTET
+    };
+
+    FileWrite write(&(write_byte_channel_open[0]), sizeof(write_byte_channel_open), 1);
+    EXPECT_CALL(fh, write(NotNull(), sizeof(write_byte_channel_open)))
+                .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
+    /* End TX cycle. */
+    EXPECT_CALL(fh, write(NotNull(), sizeof(write_byte_channel_open) - sizeof(write_byte_channel_open[0])))
+                .WillOnce(Return(0)).RetiresOnSaturation();
+
+    /* Start test sequence. Test set mocks. */
+    const nsapi_error channel_open_err = obj.channel_open();
+    EXPECT_EQ(NSAPI_ERROR_OK, channel_open_err);
+
+    /* Generate maxium amount of timeout events, which trigger retransmission of open channel request message. */
+
+    /* Complete the frame write. */
+    self_iniated_request_tx(&(write_byte_channel_open[1]), (SABM_FRAME_LEN - 1u), FRAME_HEADER_READ_LEN, fh, sig_io);
+
+    /* Begin frame re-transmit sequence.*/
+    uint8_t counter = RETRANSMIT_COUNT;
+    do {
+        FileWrite write(&(write_byte_channel_open[0]), sizeof(write_byte_channel_open), 1);
+        EXPECT_CALL(fh, write(NotNull(), sizeof(write_byte_channel_open)))
+                    .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
+        /* End TX cycle. */
+        EXPECT_CALL(fh, write(NotNull(), sizeof(write_byte_channel_open) - sizeof(write_byte_channel_open[0])))
+                    .WillOnce(Return(0)).RetiresOnSaturation();
+
+        /* Trigger timer timeout. */
+        mbed_equeue_stub::timer_dispatch();
+
+        /* Re-transmit the complete remaining part of the frame. */
+        self_iniated_request_tx(&(write_byte_channel_open[1]),
+                                (SABM_FRAME_LEN - 1u),
+                                FRAME_HEADER_READ_LEN,
+                                fh,
+                                sig_io);
+
+        --counter;
+    } while (counter != 0);
+
+    /* Trigger timer to finish the re-transmission cycle and the whole open channel request message. */
+    callback.callback_arm();
+    mbed_equeue_stub::timer_dispatch();
+
+    /* Validate Filehandle generation. */
+    EXPECT_TRUE(callback.is_callback_called());
+    EXPECT_EQ(NULL, callback.file_handle_get());
+
+    channel_open(2, callback, ENQUEUE_DEFERRED_CALL_YES, obj, fh, sig_io);
 
     /* Validate Filehandle generation. */
     EXPECT_TRUE(callback.is_callback_called());

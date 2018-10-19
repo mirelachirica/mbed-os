@@ -107,7 +107,9 @@ typedef enum
     ENQUEUE_DEFERRED_CALL_YES
 } EnqueueDeferredCallType;
 
-static const uint8_t crctable[CRC_TABLE_LEN] = {
+#define MAX_DLCI_COUNT 3u /* Max amount of DLCIs. */
+static mbed::FileHandle *m_file_handle[MAX_DLCI_COUNT] = {NULL};
+static const uint8_t crctable[CRC_TABLE_LEN]           = {
     0x00, 0x91, 0xE3, 0x72, 0x07, 0x96, 0xE4, 0x75,  0x0E, 0x9F, 0xED, 0x7C, 0x09, 0x98, 0xEA, 0x7B,
     0x1C, 0x8D, 0xFF, 0x6E, 0x1B, 0x8A, 0xF8, 0x69,  0x12, 0x83, 0xF1, 0x60, 0x15, 0x84, 0xF6, 0x67,
     0x38, 0xA9, 0xDB, 0x4A, 0x3F, 0xAE, 0xDC, 0x4D,  0x36, 0xA7, 0xD5, 0x44, 0x31, 0xA0, 0xD2, 0x43,
@@ -1833,4 +1835,63 @@ TEST_F(TestMux, channel_open_success_after_timeout)
     /* Validate Filehandle generation. */
     EXPECT_TRUE(callback.is_callback_called());
     EXPECT_TRUE(callback.file_handle_get() != NULL);
+}
+
+
+/*
+ * TC - Ensure proper behaviour when all available channel IDs are used.
+ *
+ * Test sequence:
+ * - Establish maxium available count of user channels
+ * - Issue open channel request to the module which fails with NSAPI_ERROR_NO_MEMORY
+ *
+ * Expected outcome:
+ * - As specified above
+ */
+TEST_F(TestMux, channel_open_all_channel_ids_used)
+{
+    InSequence dummy;
+
+    mbed::Mux3GPP obj;
+
+    events::EventQueue eq;
+    obj.eventqueue_attach(&eq);
+
+    MockFileHandle fh;
+    SigIo          sig_io;
+    EXPECT_CALL(fh, sigio(_)).Times(1).WillOnce(Invoke(&sig_io, &SigIo::sigio));
+    EXPECT_CALL(fh, set_blocking(false)).WillOnce(Return(0));
+
+    obj.serial_attach(&fh);
+
+    MuxCallbackTest callback;
+    obj.callback_attach(mbed::Callback<void(mbed::MuxBase::event_context_t &)>(&callback,
+                        &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
+
+    /* Establish a user channel. */
+
+    mux_self_iniated_open(callback, FRAME_TYPE_UA, obj, fh, sig_io);
+
+    /* Validate Filehandle generation. */
+    EXPECT_TRUE(callback.is_callback_called());
+    EXPECT_TRUE(callback.file_handle_get() != NULL);
+
+    /* Establish all remaining available user channels. */
+    uint8_t i       = MAX_DLCI_COUNT - 1u;
+    uint8_t dlci_id = 2u;
+    do {
+        channel_open(dlci_id, callback, ENQUEUE_DEFERRED_CALL_YES, obj, fh, sig_io);
+
+        /* Validate Filehandle generation. */
+        EXPECT_TRUE(callback.is_callback_called());
+        EXPECT_TRUE(callback.file_handle_get() != NULL);
+
+       ++dlci_id;
+        --i;
+    } while (i != 0);
+
+    /* Issue open channel request to the module which fails with NSAPI_ERROR_NO_MEMORY. */
+
+    const nsapi_error channel_open_err = obj.channel_open();
+    EXPECT_EQ(NSAPI_ERROR_NO_MEMORY, channel_open_err);
 }

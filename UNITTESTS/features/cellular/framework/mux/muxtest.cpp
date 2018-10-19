@@ -2223,3 +2223,59 @@ TEST_F(TestMux, channel_open_dm_tx_currently_running)
     EXPECT_TRUE(callback.is_callback_called());
     EXPECT_TRUE(callback.file_handle_get() != NULL);
 }
+
+
+static void user_tx_0_length_user_payload_callback()
+{
+    EXPECT_TRUE(false);
+}
+
+
+/*
+ * TC - Ensure proper behaviour when 0 length write request is issued
+ *
+ * Test sequence:
+ * - Establish  a user channel
+ * - Issue 0 length write request to the channel
+ *
+ * Expected outcome:
+ * - No Tx is started
+ * - No callback called
+ */
+TEST_F(TestMux, user_tx_0_length_user_payload)
+{
+    InSequence dummy;
+
+    mbed::Mux3GPP obj;
+
+    events::EventQueue eq;
+    obj.eventqueue_attach(&eq);
+
+    MockFileHandle fh_mock;
+    SigIo          sig_io;
+    EXPECT_CALL(fh_mock, sigio(_)).Times(1).WillOnce(Invoke(&sig_io, &SigIo::sigio));
+    EXPECT_CALL(fh_mock, set_blocking(false)).WillOnce(Return(0));
+
+    obj.serial_attach(&fh_mock);
+
+    MuxCallbackTest callback;
+    obj.callback_attach(mbed::Callback<void(mbed::MuxBase::event_context_t &)>(&callback,
+                        &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
+
+    /* Establish a user channel. */
+
+    mux_self_iniated_open(callback, FRAME_TYPE_UA, obj, fh_mock, sig_io);
+
+    /* Validate Filehandle generation. */
+    EXPECT_TRUE(callback.is_callback_called());
+    mbed::FileHandle *fh = callback.file_handle_get();
+    EXPECT_TRUE(fh != NULL);
+
+    fh->sigio(user_tx_0_length_user_payload_callback);
+
+    /* Issue 0 length write request to the channel. */
+
+    const uint8_t write_dummy = 0xA5u;
+    const ssize_t ret         = fh->write(&write_dummy, 0);
+    EXPECT_EQ(0, ret);
+}

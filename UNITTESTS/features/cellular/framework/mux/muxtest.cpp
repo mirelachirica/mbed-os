@@ -1984,3 +1984,56 @@ TEST_F(TestMux, channel_open_all_channel_ids_used_ensure_uniqueue)
     EXPECT_EQ(NSAPI_ERROR_NO_MEMORY, channel_open_err);
 
 }
+
+
+/*
+ * TC - Ensure proper behaviour when multiplexer control channel open request is rejected by the peer
+ *
+ * Test sequence:
+ * - Establish multiplexer control channel
+ * - Send open user channel request message
+ * - Peer rejects user channel request message with appropriate response message
+ * - Generate channel open callback with a invalid FileHandle
+ * - Establish user channel
+ * - Generate channel open callback with a valid FileHandle
+ *
+ * Expected outcome:
+ * - As specified above
+ */
+TEST_F(TestMux, channel_open_rejected_by_peer)
+{
+    InSequence dummy;
+
+    mbed::Mux3GPP obj;
+
+    events::EventQueue eq;
+    obj.eventqueue_attach(&eq);
+
+    MockFileHandle fh_mock;
+    SigIo          sig_io;
+    EXPECT_CALL(fh_mock, sigio(_)).Times(1).WillOnce(Invoke(&sig_io, &SigIo::sigio));
+    EXPECT_CALL(fh_mock, set_blocking(false)).WillOnce(Return(0));
+
+    obj.serial_attach(&fh_mock);
+
+    MuxCallbackTest callback;
+    obj.callback_attach(mbed::Callback<void(mbed::MuxBase::event_context_t &)>(&callback,
+                        &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
+
+    /* Establish multiplexer control channel. Peer rejects user channel request message with appropriate response
+       message. */
+
+    mux_self_iniated_open(callback, FRAME_TYPE_DM, obj, fh_mock, sig_io);
+
+    /* Validate Filehandle generation. */
+    EXPECT_TRUE(callback.is_callback_called());
+    EXPECT_EQ(NULL, callback.file_handle_get());
+
+    /* Establish user channel. */
+
+    channel_open(1, callback, ENQUEUE_DEFERRED_CALL_YES, obj, fh_mock, sig_io);
+
+    /* Validate Filehandle generation. */
+    EXPECT_TRUE(callback.is_callback_called());
+    EXPECT_TRUE(callback.file_handle_get() != NULL);
+}

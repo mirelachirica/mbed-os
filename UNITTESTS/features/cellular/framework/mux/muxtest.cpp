@@ -1895,3 +1895,92 @@ TEST_F(TestMux, channel_open_all_channel_ids_used)
     const nsapi_error channel_open_err = obj.channel_open();
     EXPECT_EQ(NSAPI_ERROR_NO_MEMORY, channel_open_err);
 }
+
+
+bool is_file_handle_uniqueue(mbed::FileHandle* obj, uint8_t current_idx)
+{
+    if (current_idx == 0) {
+        return true;
+    }
+
+    for (uint8_t i = 0; i != current_idx; ++i) {
+        if (m_file_handle[i] == obj) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+
+/*
+ * TC - Ensure that generated FileHandles are uniqueue when when all available channel IDs are used.
+ *
+ * Test sequence:
+ * - Establish maxium available count of user channels
+ * -- Ensure that generated FileHandles are uniqueue
+ * - Issue open channel request to the module which fails with NSAPI_ERROR_NO_MEMORY
+ *
+ * Expected outcome:
+ * - As specified above
+ */
+TEST_F(TestMux, channel_open_all_channel_ids_used_ensure_uniqueue)
+{
+    InSequence dummy;
+
+    mbed::Mux3GPP obj;
+
+    events::EventQueue eq;
+    obj.eventqueue_attach(&eq);
+
+    MockFileHandle fh_mock;
+    SigIo          sig_io;
+    EXPECT_CALL(fh_mock, sigio(_)).Times(1).WillOnce(Invoke(&sig_io, &SigIo::sigio));
+    EXPECT_CALL(fh_mock, set_blocking(false)).WillOnce(Return(0));
+
+    obj.serial_attach(&fh_mock);
+
+    MuxCallbackTest callback;
+    obj.callback_attach(mbed::Callback<void(mbed::MuxBase::event_context_t &)>(&callback,
+                        &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
+
+    /* Establish a user channel. */
+
+    mux_self_iniated_open(callback, FRAME_TYPE_UA, obj, fh_mock, sig_io);
+
+    /* Validate Filehandle generation. */
+    EXPECT_TRUE(callback.is_callback_called());
+    mbed::FileHandle *fh = callback.file_handle_get();
+    EXPECT_TRUE(fh != NULL);
+    uint8_t fh_counter = 0;
+    bool bool_check = is_file_handle_uniqueue(fh, fh_counter);
+    EXPECT_TRUE(bool_check);
+    m_file_handle[fh_counter] = fh;
+    ++fh_counter;
+
+    /* Establish all remaining available user channels. */
+
+    uint8_t i       = MAX_DLCI_COUNT - 1u;
+    uint8_t dlci_id = 2u;
+    do {
+        channel_open(dlci_id, callback, ENQUEUE_DEFERRED_CALL_YES, obj, fh_mock, sig_io);
+
+        /* Validate Filehandle generation. */
+        EXPECT_TRUE(callback.is_callback_called());
+        mbed::FileHandle *fh = callback.file_handle_get();
+        EXPECT_TRUE(fh != NULL);
+        bool_check = is_file_handle_uniqueue(fh, 0);
+        EXPECT_TRUE(bool_check);
+        m_file_handle[fh_counter] = fh;
+
+       ++fh_counter;
+       ++dlci_id;
+        --i;
+    } while (i != 0);
+
+    /* Issue open channel request to the module which fails with NSAPI_ERROR_NO_MEMORY. */
+
+    const nsapi_error channel_open_err = obj.channel_open();
+    EXPECT_EQ(NSAPI_ERROR_NO_MEMORY, channel_open_err);
+
+}

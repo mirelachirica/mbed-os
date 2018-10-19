@@ -2088,3 +2088,138 @@ TEST_F(TestMux, dlci_establish_peer_initiated)
     };
     peer_iniated_request_rx(&(read_byte[0]), SKIP_FLAG_SEQUENCE_OCTET, NULL, NULL, 0, fh_mock, sig_io);
 }
+
+
+/*
+ * TC - Ensure proper behaviour when user channel open is requested and DM TX is currently running
+ *
+ * Test sequence:
+ * - Establish  multiplexer control channel and user channel DLCI 1
+ * - Receive DISC command to DLCI 2 (non-established user channel)
+ * - Start sending DM response message, but do not finish it
+ * - Issue channel_open API call => accepted with NSAPI_ERROR_OK
+ * -- operation set as pending, as TX DM allready inprogress
+ * - Issue new channel_open API call => fails with NSAPI_ERROR_IN_PROGRESS
+ * - Finish sending DM response message
+ * - Start sending pending open user channel request message
+ * - Receive open user channel response message
+ * - Generate channel open callback with a valid FileHandle
+ *
+ * Expected outcome:
+ * - As specified above
+ */
+TEST_F(TestMux, channel_open_dm_tx_currently_running)
+{
+    InSequence dummy;
+
+    mbed::Mux3GPP obj;
+
+    events::EventQueue eq;
+    obj.eventqueue_attach(&eq);
+
+    MockFileHandle fh_mock;
+    SigIo          sig_io;
+    EXPECT_CALL(fh_mock, sigio(_)).Times(1).WillOnce(Invoke(&sig_io, &SigIo::sigio));
+    EXPECT_CALL(fh_mock, set_blocking(false)).WillOnce(Return(0));
+
+    obj.serial_attach(&fh_mock);
+
+    MuxCallbackTest callback;
+    obj.callback_attach(mbed::Callback<void(mbed::MuxBase::event_context_t &)>(&callback,
+                        &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
+
+    /* Establish a user channel. */
+
+    mux_self_iniated_open(callback, FRAME_TYPE_UA, obj, fh_mock, sig_io);
+
+    /* Validate Filehandle generation. */
+    EXPECT_TRUE(callback.is_callback_called());
+    EXPECT_TRUE(callback.file_handle_get() != NULL);
+
+    const uint8_t dlci_id           = DLCI_ID_LOWER_BOUND + 1u;
+    const uint8_t read_byte_disc[5] =
+    {
+        1u | (dlci_id << 2),
+        (FRAME_TYPE_DISC | PF_BIT),
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&read_byte_disc[0], 3),
+        FLAG_SEQUENCE_OCTET
+    };
+
+    /* Generate DISC from peer and trigger TX of DM response, do not finish it. */
+
+    const uint8_t write_byte_dm[6] =
+    {
+        FLAG_SEQUENCE_OCTET,
+        1u | (dlci_id << 2),
+        (FRAME_TYPE_DM | PF_BIT),
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&write_byte_dm[1], 3),
+        FLAG_SEQUENCE_OCTET
+    };
+    peer_iniated_request_rx(&(read_byte_disc[0]),
+                            SKIP_FLAG_SEQUENCE_OCTET,
+                            &(write_byte_dm[0]),
+                            NULL,
+                            0,
+                            fh_mock,
+                            sig_io);
+
+    /* Issue channel_open API call, operation set as pending, as TX DM allready inprogress. */
+
+    /* Start test sequence. */
+    nsapi_error channel_open_err = obj.channel_open();
+    EXPECT_EQ(NSAPI_ERROR_OK, channel_open_err);
+
+    /* Issue new channel open, while pending exists. */
+
+    channel_open_err = obj.channel_open();
+    EXPECT_EQ(NSAPI_ERROR_IN_PROGRESS, channel_open_err);
+
+    /* Finish sending DM response message and start TX of 1st byte of the pending open user channel request message. */
+
+    const uint32_t address_channel_open      = (3u) | ((DLCI_ID_LOWER_BOUND + 1u) << 2);
+    const uint8_t write_byte_channel_open[6] =
+    {
+        FLAG_SEQUENCE_OCTET,
+        address_channel_open,
+        (FRAME_TYPE_SABM | PF_BIT),
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&write_byte_channel_open[1], 3),
+        FLAG_SEQUENCE_OCTET
+    };
+    peer_iniated_response_tx(&(write_byte_dm[1]),
+                             (DM_FRAME_LEN -1u),
+                             &(write_byte_channel_open[0]),
+                             false,
+                             NULL,
+                             fh_mock,
+                             sig_io);
+
+    /* Finish sending open user channel request message, receive open user channel channel response message. */
+
+    const uint8_t read_byte_channel_open[5] =
+    {
+        address_channel_open,
+        (FRAME_TYPE_UA | PF_BIT),
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&read_byte_channel_open[0], 3),
+        FLAG_SEQUENCE_OCTET
+    };
+    self_iniated_request_tx(&(write_byte_channel_open[1]),
+                            (sizeof(write_byte_channel_open) - sizeof(write_byte_channel_open[0])),
+                            FRAME_HEADER_READ_LEN,
+                            fh_mock, sig_io);
+    callback.callback_arm();
+    self_iniated_response_rx(&(read_byte_channel_open[0]),
+                             NULL,
+                             SKIP_FLAG_SEQUENCE_OCTET,
+                             STRIP_FLAG_FIELD_NO,
+                             ENQUEUE_DEFERRED_CALL_YES,
+                             fh_mock,
+                             sig_io);
+
+    /* Validate Filehandle generation. */
+    EXPECT_TRUE(callback.is_callback_called());
+    EXPECT_TRUE(callback.file_handle_get() != NULL);
+}

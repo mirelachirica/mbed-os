@@ -1511,3 +1511,56 @@ TEST_F(TestMux, mux_open_rx_disc_dlci_0)
     };
     peer_iniated_request_rx(&(read_byte[0]), SKIP_FLAG_SEQUENCE_OCTET, NULL, NULL, 0, fh, sig_io);
 }
+
+
+/*
+ * TC - Ensure proper behaviour when peer sends DISC command to established user channel ID
+ *
+ * Test sequence:
+ * - Establish a user channel
+ * - Receive DISC command to the established user channel ID from the peer
+ *
+ * Expected outcome:
+ * - No action taken by the implementation: received DISC command is silently discarded
+ */
+TEST_F(TestMux, mux_open_rx_disc_dlci_in_use)
+{
+    InSequence dummy;
+
+    mbed::Mux3GPP obj;
+
+    events::EventQueue eq;
+    obj.eventqueue_attach(&eq);
+
+    MockFileHandle fh;
+    SigIo          sig_io;
+    EXPECT_CALL(fh, sigio(_)).Times(1).WillOnce(Invoke(&sig_io, &SigIo::sigio));
+    EXPECT_CALL(fh, set_blocking(false)).WillOnce(Return(0));
+
+    obj.serial_attach(&fh);
+
+    MuxCallbackTest callback;
+    obj.callback_attach(mbed::Callback<void(mbed::MuxBase::event_context_t &)>(&callback,
+                        &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
+
+
+    /* Open multiplexer control channel and user channel. */
+
+    mux_self_iniated_open(callback, FRAME_TYPE_UA, obj, fh, sig_io);
+
+    /* Validate Filehandle generation. */
+    EXPECT_TRUE(callback.is_callback_called());
+    EXPECT_TRUE(callback.file_handle_get() != NULL);
+
+    const uint8_t read_byte[5] =
+    {
+        /* Peer assumes the role of the responder. */
+        1u | (1u << 2),
+        (FRAME_TYPE_DISC | PF_BIT),
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&read_byte[0], 3u),
+        FLAG_SEQUENCE_OCTET
+    };
+    /* Generate DISC from peer which is ignored buy the implementation. */
+    peer_iniated_request_rx(&(read_byte[0]), SKIP_FLAG_SEQUENCE_OCTET, NULL, NULL, 0, fh, sig_io);
+}

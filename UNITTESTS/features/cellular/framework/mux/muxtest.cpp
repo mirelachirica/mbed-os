@@ -2399,8 +2399,6 @@ TEST_F(TestMux, user_tx_size_upper_bound_and_oob)
 
     mux_self_iniated_open(callback, FRAME_TYPE_UA, obj, fh_mock, sig_io);
 
-
-
     /* Validate Filehandle generation. */
     EXPECT_TRUE(callback.is_callback_called());
     mbed::FileHandle *fh = callback.file_handle_get();
@@ -2437,4 +2435,97 @@ TEST_F(TestMux, user_tx_size_upper_bound_and_oob)
 
     ret = fh->write(&(write_byte[4]), (TX_BUFFER_SIZE - 6u + 1u));
     EXPECT_EQ((TX_BUFFER_SIZE - 6u), ret);
+}
+
+
+static void user_tx_2_full_frame_writes_tx_callback()
+{
+    EXPECT_TRUE(false);
+}
+
+
+/*
+ * TC - Ensure proper behaviour when 2 sequential UIH frame TXs are done in 1 write call
+ *
+ * Test sequence:
+ * - Establish  a user channel
+ * - Issue 1 byte length UIH frame write request to the channel
+ * - Issue 1 byte length UIH frame write request to the channel
+ *
+ * Expected outcome:
+ * - Requests accepted by the implementation
+ * - Requests written in order in 1 write call
+ */
+TEST_F(TestMux, user_tx_2_full_frame_writes)
+{
+    InSequence dummy;
+
+    mbed::Mux3GPP obj;
+
+    events::EventQueue eq;
+    obj.eventqueue_attach(&eq);
+
+    MockFileHandle fh_mock;
+    SigIo          sig_io;
+    EXPECT_CALL(fh_mock, sigio(_)).Times(1).WillOnce(Invoke(&sig_io, &SigIo::sigio));
+    EXPECT_CALL(fh_mock, set_blocking(false)).WillOnce(Return(0));
+
+    obj.serial_attach(&fh_mock);
+
+    MuxCallbackTest callback;
+    obj.callback_attach(mbed::Callback<void(mbed::MuxBase::event_context_t &)>(&callback,
+                        &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
+
+    /* Establish a user channel. */
+
+    mux_self_iniated_open(callback, FRAME_TYPE_UA, obj, fh_mock, sig_io);
+
+    /* Validate Filehandle generation. */
+    EXPECT_TRUE(callback.is_callback_called());
+    mbed::FileHandle *fh = callback.file_handle_get();
+    EXPECT_TRUE(fh != NULL);
+
+    fh->sigio(user_tx_2_full_frame_writes_tx_callback);
+
+    /* Program write cycle, complete in 1 write call within the call context. */
+    const uint8_t dlci_id         = 1u;
+    uint8_t user_data             = 0xA5u;
+    const uint8_t write_byte_1[7] =
+    {
+        FLAG_SEQUENCE_OCTET,
+        3u | (dlci_id << 2),
+        FRAME_TYPE_UIH,
+        LENGTH_INDICATOR_OCTET | (sizeof(user_data) << 1),
+        user_data,
+        fcs_calculate(&write_byte_1[1], 3u),
+        FLAG_SEQUENCE_OCTET
+    };
+
+    FileWrite write_1(&(write_byte_1[0]), sizeof(write_byte_1), sizeof(write_byte_1));
+    EXPECT_CALL(fh_mock, write(NotNull(), sizeof(write_byte_1)))
+                .WillOnce(Invoke(&write_1, &FileWrite::write)).RetiresOnSaturation();
+
+    ssize_t write_ret = fh->write(&user_data, sizeof(user_data));
+    EXPECT_EQ(sizeof(user_data), write_ret);
+
+    /* Program write cycle, complete in 1 write call within the call context. */
+    ++user_data;
+    const uint8_t write_byte_2[7] =
+    {
+        FLAG_SEQUENCE_OCTET,
+        3u | (dlci_id << 2),
+        FRAME_TYPE_UIH,
+        LENGTH_INDICATOR_OCTET | (sizeof(user_data) << 1),
+        user_data,
+        fcs_calculate(&write_byte_2[1], 3u),
+        FLAG_SEQUENCE_OCTET
+    };
+
+    FileWrite write_2(&(write_byte_2[0]), sizeof(write_byte_2), sizeof(write_byte_2));
+    EXPECT_CALL(fh_mock, write(NotNull(), sizeof(write_byte_2)))
+                .WillOnce(Invoke(&write_2, &FileWrite::write)).RetiresOnSaturation();
+
+    write_ret = fh->write(&user_data, sizeof(user_data));
+    EXPECT_EQ(sizeof(user_data), write_ret);
+
 }

@@ -587,6 +587,42 @@ ASSERT_TRUE(false); //  @todo: implement this block
 }
 
 
+void single_complete_write_cycle(const uint8_t  *write_byte,
+                                 uint8_t         length,
+                                 const uint8_t  *new_write_byte,
+                                 MockFileHandle &fh,
+                                 SigIo          &sig_io)
+{
+    /* Enqueue deferred call to EventQueue.
+     * Trigger sigio callback from the Filehandle used by the Mux3GPP (component under test). */
+    mbed_equeue_stub::call_expect(1);
+    sig_io.dispatch();
+
+    /* Nothing to read within the RX cycle. */
+    EXPECT_CALL(fh, read(NotNull(), FRAME_HEADER_READ_LEN)).WillOnce(Return(-EAGAIN)).RetiresOnSaturation();
+
+    /* Complete the 1st write request which is in progress. */
+    FileWrite write(write_byte, length, length);
+    EXPECT_CALL(fh, write(NotNull(), length)).WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
+
+   if (new_write_byte != NULL) {
+       /* Complete the write request of pending request frame. */
+
+        const uint8_t length_of_frame = 4u + (new_write_byte[3] & ~1) + 2u; // @todo: FIX ME: magic numbers.
+
+        FileWrite write(new_write_byte, length_of_frame, length_of_frame);
+        EXPECT_CALL(fh, write(NotNull(), length_of_frame))
+                    .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
+
+        /* Request frame write sequence completed, start T1 timer. */
+        mbed_equeue_stub::call_in_expect(T1_TIMER_VALUE, 1);
+   }
+
+    /* Trigger deferred call to execute the programmed mocks above. */
+    mbed_equeue_stub::deferred_dispatch();
+}
+
+
 void channel_open(uint8_t                 dlci,
                   MuxCallbackTest        &callback,
                   EnqueueDeferredCallType enqueue_deferred_call_type,
@@ -2528,4 +2564,120 @@ TEST_F(TestMux, user_tx_2_full_frame_writes)
     write_ret = fh->write(&user_data, sizeof(user_data));
     EXPECT_EQ(sizeof(user_data), write_ret);
 
+}
+
+
+static void user_tx_dlci_establish_during_user_tx_tx_callback()
+{
+    EXPECT_TRUE(false);
+}
+
+
+/*
+ * TC - Ensure successfull DLCI establishment is done when TX is occupied by user TX request
+ *
+ * Test sequence:
+ * - Occupy TX by user TX
+ * - Request DLCI establishment => put pending as TX occupied
+ * - Request DLCI establishment => rejected as previous one pending
+ * - Finish the user TX
+ * - Finish the DLCI establishment put pending
+ *
+ * Expected outcome:
+ * - Requested DLCI established
+ */
+TEST_F(TestMux, user_tx_dlci_establish_during_user_tx)
+{
+    InSequence dummy;
+
+    mbed::Mux3GPP obj;
+
+    events::EventQueue eq;
+    obj.eventqueue_attach(&eq);
+
+    MockFileHandle fh_mock;
+    SigIo          sig_io;
+    EXPECT_CALL(fh_mock, sigio(_)).Times(1).WillOnce(Invoke(&sig_io, &SigIo::sigio));
+    EXPECT_CALL(fh_mock, set_blocking(false)).WillOnce(Return(0));
+
+    obj.serial_attach(&fh_mock);
+
+    MuxCallbackTest callback;
+    obj.callback_attach(mbed::Callback<void(mbed::MuxBase::event_context_t &)>(&callback,
+                        &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
+
+    /* Establish a user channel. */
+
+    mux_self_iniated_open(callback, FRAME_TYPE_UA, obj, fh_mock, sig_io);
+
+    /* Validate Filehandle generation. */
+    EXPECT_TRUE(callback.is_callback_called());
+    mbed::FileHandle *fh = callback.file_handle_get();
+    EXPECT_TRUE(fh != NULL);
+
+    fh->sigio(user_tx_dlci_establish_during_user_tx_tx_callback);
+
+    /* Start user TX write cycle, not finished. */
+
+    const uint8_t user_data         = 0xA5u;
+    const uint8_t write_byte_uih[7] =
+    {
+        FLAG_SEQUENCE_OCTET,
+        3u | (DLCI_ID_LOWER_BOUND << 2),
+        FRAME_TYPE_UIH,
+        LENGTH_INDICATOR_OCTET | (sizeof(user_data) << 1),
+        user_data,
+        fcs_calculate(&write_byte_uih[1], 3u),
+        FLAG_SEQUENCE_OCTET
+    };
+    FileWrite write(&(write_byte_uih[0]), sizeof(write_byte_uih), 1);
+    EXPECT_CALL(fh_mock, write(NotNull(), sizeof(write_byte_uih)))
+                .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
+    /* End TX cycle. */
+    EXPECT_CALL(fh_mock, write(NotNull(), sizeof(write_byte_uih) - sizeof(write_byte_uih[0])))
+                .WillOnce(Return(0)).RetiresOnSaturation();
+
+    const ssize_t write_ret = fh->write(&user_data, sizeof(user_data));
+    EXPECT_EQ(sizeof(user_data), write_ret);
+
+    /* Start new DLCI establishment while user TX in progress, put pending. */
+
+    const nsapi_error channel_open_err = obj.channel_open();
+    EXPECT_EQ(NSAPI_ERROR_OK, channel_open_err);
+
+    /* Finish TX cycle for user TX. */
+
+    const uint8_t write_byte_sabm[6] =
+    {
+        FLAG_SEQUENCE_OCTET,
+        3u | ((DLCI_ID_LOWER_BOUND + 1u) << 2),
+        (FRAME_TYPE_SABM | PF_BIT),
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&write_byte_sabm[1], 3u),
+        FLAG_SEQUENCE_OCTET
+    };
+    single_complete_write_cycle(&(write_byte_uih[1]), (UIH_FRAME_LEN - 1u), &(write_byte_sabm[0]), fh_mock, sig_io);
+
+    /* Finish the pending DLCI establishment cycle. */
+
+    const uint8_t read_byte_sabm[5] =
+    {
+        3u | ((DLCI_ID_LOWER_BOUND + 1u) << 2),
+        (FRAME_TYPE_UA | PF_BIT),
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&read_byte_sabm[0], 3u),
+        FLAG_SEQUENCE_OCTET
+    };
+    callback.callback_arm();
+    self_iniated_response_rx(&(read_byte_sabm[0]),
+                             NULL,
+                             SKIP_FLAG_SEQUENCE_OCTET,
+                             STRIP_FLAG_FIELD_NO,
+                             ENQUEUE_DEFERRED_CALL_YES,
+                             fh_mock,
+                             sig_io);
+
+    /* Validate Filehandle generation. */
+    EXPECT_TRUE(callback.is_callback_called());
+    EXPECT_TRUE(callback.file_handle_get() != NULL);
 }

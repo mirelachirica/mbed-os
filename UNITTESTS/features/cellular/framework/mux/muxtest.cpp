@@ -2681,3 +2681,137 @@ TEST_F(TestMux, user_tx_dlci_establish_during_user_tx)
     EXPECT_TRUE(callback.is_callback_called());
     EXPECT_TRUE(callback.file_handle_get() != NULL);
 }
+
+static MockFileHandle m_fh_mock;
+static uint8_t m_user_tx_callback_triggered_tx_within_callback_check_value = 0;
+static void tx_callback_dispatch_triggered_tx_within_callback_tx_callback()
+{
+    static const uint8_t user_data = 2u;
+    /* Needs to be static as referenced after this function returns. */
+    static const uint8_t write_byte[7] =
+    {
+        FLAG_SEQUENCE_OCTET,
+        3u | (1u << 2),
+        FRAME_TYPE_UIH,
+        LENGTH_INDICATOR_OCTET | (sizeof(user_data) << 1),
+        user_data,
+        fcs_calculate(&write_byte[1], 3u),
+        FLAG_SEQUENCE_OCTET
+    };
+    static FileWrite write(&(write_byte[0]), sizeof(write_byte), sizeof(write_byte));
+
+    ssize_t ret;
+    uint8_t user_data_2;
+    switch (m_user_tx_callback_triggered_tx_within_callback_check_value) {
+        case 0:
+            m_user_tx_callback_triggered_tx_within_callback_check_value = 1u;
+
+            /* Issue new write to the same DLCI within the callback context. */
+            EXPECT_CALL(m_fh_mock, write(NotNull(), sizeof(write_byte)))
+                        .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
+
+            /* This write is started when this callback function returns. */
+            ret = m_file_handle[0]->write(&user_data, sizeof(user_data));
+            EXPECT_EQ(sizeof(user_data), ret);
+
+            /* This write request will set the pending TX callback, and triggers this function to be called 2nd time. */
+            user_data_2 = 0xA5u;
+            ret         = m_file_handle[0]->write(&user_data_2, sizeof(user_data_2));
+            EXPECT_EQ(-EAGAIN, ret);
+
+            break;
+        case 1:
+            m_user_tx_callback_triggered_tx_within_callback_check_value = 2u;
+
+            break;
+        default:
+            EXPECT_TRUE(false);
+
+            break;
+    }
+}
+
+
+/*
+ * TC - Ensure proper behaviour when UIH frame TX is done within the TX callback
+ *
+ * Test sequence:
+ * - TX pending callback called
+ * - new TX done within the callback
+ * -- TX pending set within the callback
+ *
+ * Expected outcome:
+ * - As specified above
+ */
+TEST_F(TestMux, tx_callback_dispatch_triggered_tx_within_callback)
+{
+    InSequence dummy;
+
+    mbed::Mux3GPP obj;
+
+    events::EventQueue eq;
+    obj.eventqueue_attach(&eq);
+
+    SigIo          sig_io;
+    EXPECT_CALL(m_fh_mock, sigio(_)).Times(1).WillOnce(Invoke(&sig_io, &SigIo::sigio));
+    EXPECT_CALL(m_fh_mock, set_blocking(false)).WillOnce(Return(0));
+
+    obj.serial_attach(&m_fh_mock);
+
+    MuxCallbackTest callback;
+    obj.callback_attach(mbed::Callback<void(mbed::MuxBase::event_context_t &)>(&callback,
+                        &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
+
+    /* Establish a user channel. */
+
+    mux_self_iniated_open(callback, FRAME_TYPE_UA, obj, m_fh_mock, sig_io);
+
+    /* Validate Filehandle generation. */
+    EXPECT_TRUE(callback.is_callback_called());
+    m_file_handle[0] = callback.file_handle_get();
+    EXPECT_TRUE(m_file_handle[0] != NULL);
+
+    (m_file_handle[0])->sigio(tx_callback_dispatch_triggered_tx_within_callback_tx_callback);
+
+    /* Program write cycle. */
+    const uint8_t user_data     = 1u;
+    const uint8_t dlci_id       = 1u;
+    const uint8_t write_byte[7] =
+    {
+        FLAG_SEQUENCE_OCTET,
+        3u | (dlci_id << 2),
+        FRAME_TYPE_UIH,
+        LENGTH_INDICATOR_OCTET | (sizeof(user_data) << 1),
+        user_data,
+        fcs_calculate(&write_byte[1], 3u),
+        FLAG_SEQUENCE_OCTET
+    };
+
+    FileWrite write(&(write_byte[0]), sizeof(write_byte), 1);
+    EXPECT_CALL(m_fh_mock, write(NotNull(), sizeof(write_byte)))
+                .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
+    /* End TX cycle. */
+    EXPECT_CALL(m_fh_mock, write(NotNull(), sizeof(write_byte) - sizeof(write_byte[0])))
+                .WillOnce(Return(0)).RetiresOnSaturation();
+
+    /* 1st write request accepted by the implementation. */
+    ssize_t ret = (m_file_handle[0])->write(&user_data, sizeof(user_data));
+    EXPECT_EQ(sizeof(user_data), ret);
+
+    /* 1st write request not yet completed by the implementation, issue 2nd request which sets the pending TX callback.
+     */
+    const uint8_t user_data_2 = 0xA5u;
+    ret                       = (m_file_handle[0])->write(&user_data_2, sizeof(user_data_2));
+    EXPECT_EQ(-EAGAIN, ret);
+
+    /* Begin sequence: Complete the 1st write, which triggers the pending TX callback. */
+
+    single_complete_write_cycle(&(write_byte[1]),
+                                (sizeof(write_byte) - sizeof(write_byte[0])),
+                                NULL,
+                                m_fh_mock,
+                                sig_io);
+
+    /* Validate proper callback sequence. */
+    EXPECT_EQ(2, m_user_tx_callback_triggered_tx_within_callback_check_value);
+}

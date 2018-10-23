@@ -2845,11 +2845,12 @@ TEST_F(TestMux, tx_callback_dispatch_set_pending_multiple_times_for_same_dlci_on
     events::EventQueue eq;
     obj.eventqueue_attach(&eq);
 
+    MockFileHandle fh_mock;
     SigIo          sig_io;
-    EXPECT_CALL(m_fh_mock, sigio(_)).Times(1).WillOnce(Invoke(&sig_io, &SigIo::sigio));
-    EXPECT_CALL(m_fh_mock, set_blocking(false)).WillOnce(Return(0));
+    EXPECT_CALL(fh_mock, sigio(_)).Times(1).WillOnce(Invoke(&sig_io, &SigIo::sigio));
+    EXPECT_CALL(fh_mock, set_blocking(false)).WillOnce(Return(0));
 
-    obj.serial_attach(&m_fh_mock);
+    obj.serial_attach(&fh_mock);
 
     MuxCallbackTest callback;
     obj.callback_attach(mbed::Callback<void(mbed::MuxBase::event_context_t &)>(&callback,
@@ -2857,7 +2858,7 @@ TEST_F(TestMux, tx_callback_dispatch_set_pending_multiple_times_for_same_dlci_on
 
     /* Establish a user channel. */
 
-    mux_self_iniated_open(callback, FRAME_TYPE_UA, obj, m_fh_mock, sig_io);
+    mux_self_iniated_open(callback, FRAME_TYPE_UA, obj, fh_mock, sig_io);
 
     /* Validate Filehandle generation. */
     EXPECT_TRUE(callback.is_callback_called());
@@ -2880,10 +2881,10 @@ TEST_F(TestMux, tx_callback_dispatch_set_pending_multiple_times_for_same_dlci_on
         FLAG_SEQUENCE_OCTET
     };
     FileWrite write(&(write_byte[0]), sizeof(write_byte), 1);
-    EXPECT_CALL(m_fh_mock, write(NotNull(), sizeof(write_byte)))
+    EXPECT_CALL(fh_mock, write(NotNull(), sizeof(write_byte)))
                 .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
     /* End TX cycle. */
-    EXPECT_CALL(m_fh_mock, write(NotNull(), sizeof(write_byte) - sizeof(write_byte[0])))
+    EXPECT_CALL(fh_mock, write(NotNull(), sizeof(write_byte) - sizeof(write_byte[0])))
                 .WillOnce(Return(0)).RetiresOnSaturation();
 
     /* 1st write request accepted by the implementation. */
@@ -2907,9 +2908,113 @@ TEST_F(TestMux, tx_callback_dispatch_set_pending_multiple_times_for_same_dlci_on
     single_complete_write_cycle(&(write_byte[1]),
                                 (sizeof(write_byte) - sizeof(write_byte[0])),
                                 NULL,
-                                m_fh_mock,
+                                fh_mock,
                                 sig_io);
 
     /* Validate proper callback sequence. */
     EXPECT_EQ(1u, m_user_tx_callback_set_pending_multiple_times_for_same_dlci_only_1_callback_generated_value);
+}
+
+
+static uint8_t m_user_tx_callback_set_pending_for_all_dlcis_check_value = 0;
+static void tx_callback_dispatch_set_pending_for_all_dlcis_tx_callback()
+{
+    ++m_user_tx_callback_set_pending_for_all_dlcis_check_value;
+}
+
+ /*
+ * TC - Ensure proper behaviour when all all channels have TX callback pending
+ *
+ * Expected outcome:
+ * - Correct amount of callbacks executed
+ */
+TEST_F(TestMux, tx_callback_dispatch_set_pending_for_all_dlcis)
+{
+    m_user_tx_callback_set_pending_for_all_dlcis_check_value = 0;
+
+    InSequence dummy;
+
+    mbed::Mux3GPP obj;
+
+    events::EventQueue eq;
+    obj.eventqueue_attach(&eq);
+
+    MockFileHandle fh_mock;
+    SigIo          sig_io;
+    EXPECT_CALL(fh_mock, sigio(_)).Times(1).WillOnce(Invoke(&sig_io, &SigIo::sigio));
+    EXPECT_CALL(fh_mock, set_blocking(false)).WillOnce(Return(0));
+
+    obj.serial_attach(&fh_mock);
+
+    MuxCallbackTest callback;
+    obj.callback_attach(mbed::Callback<void(mbed::MuxBase::event_context_t &)>(&callback,
+                        &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
+
+    /* Establish a user channel. */
+
+    mux_self_iniated_open(callback, FRAME_TYPE_UA, obj, fh_mock, sig_io);
+
+    /* Validate Filehandle generation. */
+    EXPECT_TRUE(callback.is_callback_called());
+    m_file_handle[0] = callback.file_handle_get();
+    EXPECT_TRUE(m_file_handle[0] != NULL);
+
+    (m_file_handle[0])->sigio(tx_callback_dispatch_set_pending_for_all_dlcis_tx_callback);
+
+    /* Create max amount of DLCIs and collect the handles */
+    uint8_t dlci_id = DLCI_ID_LOWER_BOUND + 1u;
+    for (uint8_t i = 1u; i!= MAX_DLCI_COUNT; ++i) {
+        channel_open(dlci_id, callback, ENQUEUE_DEFERRED_CALL_YES, obj, fh_mock, sig_io);
+
+        /* Validate Filehandle generation. */
+        EXPECT_TRUE(callback.is_callback_called());
+        m_file_handle[i] = callback.file_handle_get();
+        EXPECT_TRUE(m_file_handle[i] != NULL);
+
+        (m_file_handle[i])->sigio(tx_callback_dispatch_set_pending_for_all_dlcis_tx_callback);
+
+        ++dlci_id;
+    }
+
+    /* All available DLCI ids consumed. Next request will fail. */
+    nsapi_error channel_open_err = obj.channel_open();
+    EXPECT_EQ(NSAPI_ERROR_NO_MEMORY, channel_open_err);
+
+    /* Program write cycle. */
+    dlci_id                     = DLCI_ID_LOWER_BOUND;
+    const uint8_t user_data     = 1u;
+    const uint8_t write_byte[7] =
+    {
+        FLAG_SEQUENCE_OCTET,
+        3u | (dlci_id << 2),
+        FRAME_TYPE_UIH,
+        LENGTH_INDICATOR_OCTET | (sizeof(user_data) << 1),
+        user_data,
+        fcs_calculate(&write_byte[1], 3u),
+        FLAG_SEQUENCE_OCTET
+    };
+
+    FileWrite write(&(write_byte[0]), sizeof(write_byte), 1);
+    EXPECT_CALL(fh_mock, write(NotNull(), sizeof(write_byte)))
+                .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
+    /* End TX cycle. */
+    EXPECT_CALL(fh_mock, write(NotNull(), sizeof(write_byte) - sizeof(write_byte[0])))
+                .WillOnce(Return(0)).RetiresOnSaturation();
+
+    /* 1st write request accepted by the implementation. */
+    ssize_t write_ret = (m_file_handle[0])->write(&user_data, sizeof(user_data));
+    EXPECT_EQ(sizeof(user_data), write_ret);
+
+    /* TX cycle in progress, all further write request will fail. */
+    for (uint8_t i = 0; i!= MAX_DLCI_COUNT; ++i) {
+        ssize_t write_ret = (m_file_handle[i])->write(&user_data, sizeof(user_data));
+        EXPECT_EQ(-EAGAIN, write_ret);
+    }
+
+    /* Begin sequence: Complete the 1st write, which triggers the pending TX callback. */
+
+    single_complete_write_cycle(&(write_byte[1]), (sizeof(write_byte) - sizeof(write_byte[0])), NULL, fh_mock, sig_io);
+
+    /* Validate proper callback sequence. */
+    EXPECT_EQ(MAX_DLCI_COUNT, m_user_tx_callback_set_pending_for_all_dlcis_check_value);
 }

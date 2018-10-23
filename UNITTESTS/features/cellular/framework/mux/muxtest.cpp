@@ -3018,3 +3018,138 @@ TEST_F(TestMux, tx_callback_dispatch_set_pending_for_all_dlcis)
     /* Validate proper callback sequence. */
     EXPECT_EQ(MAX_DLCI_COUNT, m_user_tx_callback_set_pending_for_all_dlcis_check_value);
 }
+
+
+static uint8_t m_user_tx_callback_rollover_tx_pending_bitmask_check_value = 0;
+static void tx_callback_dispatch_rollover_tx_pending_bitmask_tx_callback()
+{
+    ++m_user_tx_callback_rollover_tx_pending_bitmask_check_value;
+
+    if (m_user_tx_callback_rollover_tx_pending_bitmask_check_value == MAX_DLCI_COUNT) {
+        /* Callback for the last DLCI in the sequence, set pending bit for the 1st DLCI in the sequence. */
+
+        static const uint8_t user_data = 2u;
+        /* Needs to be static as referenced after this function returns. */
+        static const uint8_t write_byte[7] =
+        {
+            FLAG_SEQUENCE_OCTET,
+            3u | (DLCI_ID_LOWER_BOUND << 2),
+            FRAME_TYPE_UIH,
+            LENGTH_INDICATOR_OCTET | (sizeof(user_data) << 1),
+            user_data,
+            fcs_calculate(&write_byte[1], 3u),
+            FLAG_SEQUENCE_OCTET
+        };
+        /* Write all in a 1 write request, which will guarantee callback processing continues within current disptach
+           loop. */
+        static FileWrite write(&(write_byte[0]), sizeof(write_byte), sizeof(write_byte));
+        EXPECT_CALL(m_fh_mock, write(NotNull(), sizeof(write_byte)))
+                    .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
+
+        /* 1st write request accepted by the implementation: TX cycle not finished. */
+        ssize_t write_ret = (m_file_handle[0])->write(&user_data, sizeof(user_data));
+        EXPECT_EQ(sizeof(user_data), write_ret);
+
+        /* TX cycle start requested by write call above, now set pending bit for the 1st DLCI of the sequence. */
+        write_ret = (m_file_handle[0])->write(&user_data, sizeof(user_data));
+        EXPECT_EQ(-EAGAIN, write_ret);
+    }
+}
+
+
+/*
+ * TC - Ensure proper roll over of the bitmask used for determining the disptaching of correct TX callback
+ * Test sequence:
+ * - Establish max amount of DLCIs
+ * - Set TX pending bit for all establish DLCIs
+ * - Within the TX callback of last DLCI of the sequence, set pending bit of the 1st DLCI of the sequence
+ *
+ * Expected outcome:
+ * - Validate proper TX callback callcount in m_user_tx_callback_rollover_tx_pending_bitmask_check_value
+ */
+TEST_F(TestMux, tx_callback_dispatch_rollover_tx_pending_bitmask)
+{
+    m_user_tx_callback_rollover_tx_pending_bitmask_check_value = 0;
+
+    InSequence dummy;
+
+    mbed::Mux3GPP obj;
+
+    events::EventQueue eq;
+    obj.eventqueue_attach(&eq);
+
+    SigIo          sig_io;
+    EXPECT_CALL(m_fh_mock, sigio(_)).Times(1).WillOnce(Invoke(&sig_io, &SigIo::sigio));
+    EXPECT_CALL(m_fh_mock, set_blocking(false)).WillOnce(Return(0));
+
+    obj.serial_attach(&m_fh_mock);
+
+    MuxCallbackTest callback;
+    obj.callback_attach(mbed::Callback<void(mbed::MuxBase::event_context_t &)>(&callback,
+                        &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
+
+    /* Establish a user channel. */
+
+    mux_self_iniated_open(callback, FRAME_TYPE_UA, obj, m_fh_mock, sig_io);
+
+    /* Validate Filehandle generation. */
+    EXPECT_TRUE(callback.is_callback_called());
+    m_file_handle[0] = callback.file_handle_get();
+    EXPECT_TRUE(m_file_handle[0] != NULL);
+
+    (m_file_handle[0])->sigio(tx_callback_dispatch_rollover_tx_pending_bitmask_tx_callback);
+
+    /* Create max amount of DLCIs and collect the handles */
+    uint8_t dlci_id = DLCI_ID_LOWER_BOUND + 1u;
+    for (uint8_t i = 1u; i!= MAX_DLCI_COUNT; ++i) {
+        channel_open(dlci_id, callback, ENQUEUE_DEFERRED_CALL_YES, obj, m_fh_mock, sig_io);
+
+        /* Validate Filehandle generation. */
+        EXPECT_TRUE(callback.is_callback_called());
+        m_file_handle[i] = callback.file_handle_get();
+        EXPECT_TRUE(m_file_handle[i] != NULL);
+
+        (m_file_handle[i])->sigio(tx_callback_dispatch_rollover_tx_pending_bitmask_tx_callback);
+
+        ++dlci_id;
+    }
+
+    /* Start write cycle for the 1st DLCI. */
+    dlci_id                     = DLCI_ID_LOWER_BOUND;
+    const uint8_t user_data     = 1u;
+    const uint8_t write_byte[7] =
+    {
+        FLAG_SEQUENCE_OCTET,
+        3u | (dlci_id << 2),
+        FRAME_TYPE_UIH,
+        LENGTH_INDICATOR_OCTET | (sizeof(user_data) << 1),
+        user_data,
+        fcs_calculate(&write_byte[1], 3u),
+        FLAG_SEQUENCE_OCTET
+    };
+    FileWrite write(&(write_byte[0]), sizeof(write_byte), 1);
+    EXPECT_CALL(m_fh_mock, write(NotNull(), sizeof(write_byte)))
+                .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
+    /* End TX cycle. */
+    EXPECT_CALL(m_fh_mock, write(NotNull(), sizeof(write_byte) - sizeof(write_byte[0])))
+                .WillOnce(Return(0)).RetiresOnSaturation();
+
+    /* 1st write request accepted by the implementation: TX cycle not finished. */
+    ssize_t write_ret = (m_file_handle[0])->write(&user_data, sizeof(user_data));
+    EXPECT_EQ(sizeof(user_data), write_ret);
+
+    /* TX cycle in progress, set TX pending bit for all established DLCIs. */
+    for (uint8_t i = 0; i!= MAX_DLCI_COUNT; ++i) {
+        write_ret = (m_file_handle[i])->write(&user_data, sizeof(user_data));
+        EXPECT_EQ(-EAGAIN, write_ret);
+    }
+
+    /* Begin sequence: Complete the 1st write, which triggers the pending TX callback. */
+
+    single_complete_write_cycle(&(write_byte[1]), (sizeof(write_byte) - sizeof(write_byte[0])), NULL, m_fh_mock, sig_io);
+
+    /* Validate proper TX callback callcount. */
+    EXPECT_EQ((MAX_DLCI_COUNT +1u), m_user_tx_callback_rollover_tx_pending_bitmask_check_value);
+
+    /* End sequence: Complete the 1st write, which triggers the pending TX callback. */
+}

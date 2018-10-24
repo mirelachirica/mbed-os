@@ -954,6 +954,66 @@ void peer_iniated_response_tx(const uint8_t  *buf,
 }
 
 
+void single_byte_read_cycle(const uint8_t  *read_byte,
+                            uint8_t         length,
+                            MockFileHandle &fh,
+                            SigIo          &sig_io)
+{
+    EXPECT_TRUE(length >= 6); //@todo: MAGIC: 6 min size for UIH as payload min size is 1
+
+    uint8_t current_read_len;
+    uint8_t rx_count = 0;
+
+    /* Phase 1: read header length. */
+    do {
+        /* Trigger sigio from underlying FileHandle to run programmed mock above. */
+        mbed_equeue_stub::call_expect(1);
+        sig_io.dispatch();
+
+        FileRead read(&(read_byte[rx_count]), (FRAME_HEADER_READ_LEN - rx_count), 1);
+        EXPECT_CALL(fh, read(NotNull(), (FRAME_HEADER_READ_LEN - rx_count)))
+                    .WillOnce(Invoke(&read, &FileRead::read)).RetiresOnSaturation();
+
+        if ((rx_count + 1u) != FRAME_HEADER_READ_LEN) {
+            current_read_len = (FRAME_HEADER_READ_LEN - (rx_count + 1u));
+        } else {
+            /* We have entered phase 2 of the read cycle. */
+            current_read_len = (length - (rx_count + 1u));
+        }
+
+        /* Stop the read cycle. */
+        EXPECT_CALL(fh, read(NotNull(), current_read_len)).WillOnce(Return(-EAGAIN)).RetiresOnSaturation();
+
+        /* Trigger deferred call to execute the programmed mocks above. */
+        mbed_equeue_stub::deferred_dispatch();
+
+        ++rx_count;
+    } while (rx_count != FRAME_HEADER_READ_LEN);
+
+    /* Phase 2: read remainder of the frame. */
+    do {
+        /* Trigger sigio from underlying FileHandle to run programmed mock above. */
+        mbed_equeue_stub::call_expect(1);
+        sig_io.dispatch();
+
+        FileRead read(&(read_byte[rx_count]), (length - rx_count), 1);
+        EXPECT_CALL(fh, read(NotNull(), (length - rx_count)))
+                    .WillOnce(Invoke(&read, &FileRead::read)).RetiresOnSaturation();
+
+        if ((rx_count + 1u) != length) {
+            /* Stop the read cycle. */
+            EXPECT_CALL(fh, read(NotNull(), (length - (rx_count + 1u))))
+                        .WillOnce(Return(-EAGAIN)).RetiresOnSaturation();
+        }
+
+        /* Trigger deferred call to execute the programmed mocks above. */
+        mbed_equeue_stub::deferred_dispatch();
+
+        ++rx_count;
+    } while (rx_count != length);
+}
+
+
 /*
  * TC - Ensure proper behaviour when channel is opened and multiplexer control channel is not open
  *
@@ -3869,4 +3929,82 @@ TEST_F(TestMux, user_rx_rx_suspend_rx_resume_cycle)
     EXPECT_TRUE(buffer[0] == user_data);
     read_ret = m_file_handle[0]->read(&(buffer[0]), sizeof(buffer));
     EXPECT_EQ(-EAGAIN, read_ret);
+}
+
+
+static uint8_t m_user_rx_read_1_byte_per_run_context_check_value = 0;
+static void user_rx_read_1_byte_per_run_context_callback()
+{
+    ++m_user_rx_read_1_byte_per_run_context_check_value;
+}
+
+
+/*
+ * TC - Ensure that Rx frame read works correctly when only 1 byte can be read from lower layer within run context.
+ *
+ * Test sequence:
+ * - Establish 1 DLCI
+ * - Generate user RX data frame
+ * - Generate read cycles which only supply 1 byte at a time from lower layer
+ * - Verify read buffer upon frame read complete
+ *
+ * Expected outcome:
+ * - Read buffer verified
+ * - Correct callback count
+ */
+TEST_F(TestMux, user_rx_read_1_byte_per_run_context)
+{
+    m_user_rx_read_1_byte_per_run_context_check_value = 0;
+
+    InSequence dummy;
+
+    mbed::Mux3GPP obj;
+
+    events::EventQueue eq;
+    obj.eventqueue_attach(&eq);
+
+    MockFileHandle fh_mock;
+    SigIo          sig_io;
+    EXPECT_CALL(fh_mock, sigio(_)).Times(1).WillOnce(Invoke(&sig_io, &SigIo::sigio));
+    EXPECT_CALL(fh_mock, set_blocking(false)).WillOnce(Return(0));
+
+    obj.serial_attach(&fh_mock);
+
+    MuxCallbackTest callback;
+    obj.callback_attach(mbed::Callback<void(mbed::MuxBase::event_context_t &)>(&callback,
+                        &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
+
+    /* Establish a user channel. */
+
+    mux_self_iniated_open(callback, FRAME_TYPE_UA, obj, fh_mock, sig_io);
+
+    /* Validate Filehandle generation. */
+    EXPECT_TRUE(callback.is_callback_called());
+    m_file_handle[0] = callback.file_handle_get();
+    EXPECT_TRUE(m_file_handle[0] != NULL);
+
+    m_file_handle[0]->sigio(user_rx_read_1_byte_per_run_context_callback);
+
+    /* Start read cycle for the DLCI. */
+    const uint8_t user_data    = 0xA5u;
+    const uint8_t read_byte[6] =
+    {
+        1u | (DLCI_ID_LOWER_BOUND << 2),
+        FRAME_TYPE_UIH,
+        LENGTH_INDICATOR_OCTET | (sizeof(user_data) << 1),
+        user_data,
+        fcs_calculate(&read_byte[0], 3u),
+        FLAG_SEQUENCE_OCTET
+    };
+    single_byte_read_cycle(&(read_byte[0]), sizeof(read_byte), fh_mock, sig_io);
+
+    /* Verify read buffer. */
+    mbed_equeue_stub::call_expect(1);
+    uint8_t buffer[1]      = {0};
+    const ssize_t read_ret = m_file_handle[0]->read(&(buffer[0]), sizeof(buffer));
+    EXPECT_EQ(sizeof(buffer), read_ret);
+    EXPECT_EQ(user_data, buffer[0]);
+
+    /* Validate proper callback callcount. */
+    EXPECT_EQ(1, m_user_rx_read_1_byte_per_run_context_check_value);
 }

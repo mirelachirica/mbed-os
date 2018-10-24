@@ -4504,3 +4504,112 @@ TEST_F(TestMux, user_rx_invalidate_dlci_id_used)
     /* Validate proper callback callcount. */
     EXPECT_EQ(1, m_user_rx_invalidate_dlci_id_used_check_value);
 }
+
+
+static uint8_t m_user_rx_invalid_fcs_check_value = 0;
+static void user_rx_invalid_fcs_callback()
+{
+    ++m_user_rx_invalid_fcs_check_value;
+}
+
+
+/*
+ * TC - Ensure proper behaviour when user data Rx frame received with invalid FCS
+ *
+ * Test sequence:
+ * - Mux3GPP open
+ * - Establish a DLCI
+ * - Rx user data frame with invalid FCS: silently discarded by the implementation
+ * - Rx user data frame with valid FCS: accepted by the implementation.
+ *
+ * Expected outcome:
+ * - The invalid FCS Rx frame is dropped by the implementation
+ * - The valid FCS Rx frame is accepted by the implementation
+ * - Validate proper callback callcount
+ * - Validate read buffer
+ */
+TEST_F(TestMux, user_rx_invalid_fcs)
+{
+    m_user_rx_invalid_fcs_check_value = 0;
+
+    InSequence dummy;
+
+    mbed::Mux3GPP obj;
+
+    events::EventQueue eq;
+    obj.eventqueue_attach(&eq);
+
+    MockFileHandle fh_mock;
+    SigIo          sig_io;
+    EXPECT_CALL(fh_mock, sigio(_)).Times(1).WillOnce(Invoke(&sig_io, &SigIo::sigio));
+    EXPECT_CALL(fh_mock, set_blocking(false)).WillOnce(Return(0));
+
+    obj.serial_attach(&fh_mock);
+
+    MuxCallbackTest callback;
+    obj.callback_attach(mbed::Callback<void(mbed::MuxBase::event_context_t &)>(&callback,
+                        &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
+
+    /* Establish a user channel. */
+
+    mux_self_iniated_open(callback, FRAME_TYPE_UA, obj, fh_mock, sig_io);
+
+    /* Validate Filehandle generation. */
+    EXPECT_TRUE(callback.is_callback_called());
+    m_file_handle[0] = callback.file_handle_get();
+    EXPECT_TRUE(m_file_handle[0] != NULL);
+
+    m_file_handle[0]->sigio(user_rx_invalid_fcs_callback);
+
+    /* Establish a DLCI. */
+
+    /* Rx user data frame with invalid FCS: silently discarded by the implementation. */
+    const uint8_t dlci_id   = DLCI_ID_LOWER_BOUND;
+    const uint8_t user_data = 0xA5u;
+    uint8_t read_byte[6]    =
+    {
+        1u | (dlci_id << 2),
+        FRAME_TYPE_UIH,
+        LENGTH_INDICATOR_OCTET | (sizeof(user_data) << 1),
+        user_data,
+        fcs_calculate(&read_byte[0], 3u) + 1u,
+        FLAG_SEQUENCE_OCTET
+    };
+    single_complete_read_cycle(&(read_byte[0]),
+                               sizeof(read_byte),
+                               RESUME_RX_CYCLE,
+                               NULL,
+                               0,
+                               ENQUEUE_DEFERRED_CALL_YES,
+                               fh_mock,
+                               sig_io);
+
+    /* Validate proper callback callcount. */
+    EXPECT_EQ(0, m_user_rx_invalid_fcs_check_value);
+
+    /* Rx user data frame with valid FCS: accepted by the implementation. */
+    read_byte[4] = fcs_calculate(&read_byte[0], 3u);
+    single_complete_read_cycle(&(read_byte[0]),
+                               sizeof(read_byte),
+                               SUSPEND_RX_CYCLE,
+                               NULL,
+                               0,
+                               ENQUEUE_DEFERRED_CALL_YES,
+                               fh_mock,
+                               sig_io);
+
+    /* Validate proper callback callcount. */
+    EXPECT_EQ(1, m_user_rx_invalid_fcs_check_value);
+
+    /* Validate read buffer. */
+    mbed_equeue_stub::call_expect(1);
+    uint8_t test_buffer[1] = {0};
+    ssize_t read_ret       = m_file_handle[0]->read(&(test_buffer[0]), 1u);
+    EXPECT_EQ(1, read_ret);
+    EXPECT_EQ(user_data, test_buffer[0]);
+    read_ret = m_file_handle[0]->read(&(test_buffer[0]), 1u);
+    EXPECT_EQ(-EAGAIN, read_ret);
+
+    /* Validate proper callback callcount. */
+    EXPECT_EQ(1, m_user_rx_invalid_fcs_check_value);
+}

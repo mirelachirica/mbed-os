@@ -546,39 +546,29 @@ void self_iniated_response_rx(const uint8_t            *rx_buf,
 
     if (resp_write_byte != NULL)  {
         /* RX frame completed, start the response frame TX sequence inside the current RX cycle. */
-ASSERT_TRUE(false); //  @todo: implement this block
+
         const uint8_t length_of_frame = 4u + (resp_write_byte[3] & ~1) + 2u; // @todo: FIX ME: magic numbers.
-#if 0
-        mock_write = mock_free_get("write");
-        CHECK(mock_write != NULL);
-        mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
-        mock_write->input_param[0].param        = (uint32_t)&(resp_write_byte[0]);
-        mock_write->input_param[1].param        = length_of_frame;
-        mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
-        mock_write->return_value                = 1;
+
+        FileWrite write_1(&(resp_write_byte[0]), length_of_frame, 1);
+        EXPECT_CALL(fh, write(NotNull(), length_of_frame))
+                    .WillOnce(Invoke(&write_1, &FileWrite::write)).RetiresOnSaturation();
 
         /* End TX sequence: this call orginates from tx_internal_resp_entry_run(). */
-        mock_write = mock_free_get("write");
-        CHECK(mock_write != NULL);
-        mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
-        mock_write->input_param[0].param        = (uint32_t)&(resp_write_byte[1]);
-        mock_write->input_param[1].param        = (length_of_frame - 1u);
-        mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
-        mock_write->return_value                = 0;
+        FileWrite write_2(&(resp_write_byte[1]), (length_of_frame - 1u), 0);
+        EXPECT_CALL(fh, write(NotNull(), (length_of_frame - 1u)))
+                    .WillOnce(Invoke(&write_2, &FileWrite::write)).RetiresOnSaturation();
+
+        /* Resume the Rx cycle and stop it. */
+        EXPECT_CALL(fh, read(NotNull(), FRAME_HEADER_READ_LEN)).WillOnce(Return(-EAGAIN)).RetiresOnSaturation();
 
         /* End TX sequence: this call orginates from on_deferred_call(). */
-        mock_write = mock_free_get("write");
-        CHECK(mock_write != NULL);
-        mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
-        mock_write->input_param[0].param        = (uint32_t)&(resp_write_byte[1]);
-        mock_write->input_param[1].param        = (length_of_frame - 1u);
-        mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
-        mock_write->return_value                = 0;
-#endif
+        FileWrite write_3(&(resp_write_byte[1]), (length_of_frame - 1u), 0);
+        EXPECT_CALL(fh, write(NotNull(), (length_of_frame - 1u)))
+                    .WillOnce(Invoke(&write_3, &FileWrite::write)).RetiresOnSaturation();
+    } else {
+        /* Resume the Rx cycle and stop it. */
+        EXPECT_CALL(fh, read(NotNull(), FRAME_HEADER_READ_LEN)).WillOnce(Return(-EAGAIN)).RetiresOnSaturation();
     }
-
-    /* Resume the Rx cycle and stop it. */
-    EXPECT_CALL(fh, read(NotNull(), FRAME_HEADER_READ_LEN)).WillOnce(Return(-EAGAIN)).RetiresOnSaturation();
 
     mbed_equeue_stub::deferred_dispatch();
 
@@ -4321,4 +4311,196 @@ TEST_F(TestMux, user_rx_dlci_not_established)
 
     const nsapi_error channel_open_err = obj.channel_open();
     EXPECT_EQ(NSAPI_ERROR_NO_MEMORY, channel_open_err);
+}
+
+
+static uint8_t m_user_rx_invalidate_dlci_id_used_check_value = 0;
+static void user_rx_invalidate_dlci_id_used_callback()
+{
+    ++m_user_rx_invalidate_dlci_id_used_check_value;
+}
+
+
+/*
+ * TC - Ensure proper behaviour when user data Rx frame received to DLCI ID value, which implementation uses internally
+ *      to invalidate a DLCI ID object.
+ *
+ * Test sequence:
+ * - Mux3GPP open
+ * - Rx user data frame to invalidate ID DLCI: silently discarded by the implementation
+ * - Establish a DLCI
+ * - Rx user data frame to invalidate ID DLCI: silently discarded by the implementation
+ * - Rx user data frame to established DLCI: accepted by the implementation.
+ *
+ * Expected outcome:
+ * - The invalidate ID DLCI Rx frame is dropped by the implementation
+ * - The Rx frame is accepted by the implementation for the established DLCI
+ * - Validate proper callback callcount
+ * - Validate read buffer
+ */
+TEST_F(TestMux, user_rx_invalidate_dlci_id_used)
+{
+    m_user_rx_invalidate_dlci_id_used_check_value = 0;
+
+    InSequence dummy;
+
+    mbed::Mux3GPP obj;
+
+    events::EventQueue eq;
+    obj.eventqueue_attach(&eq);
+
+    MockFileHandle fh_mock;
+    SigIo          sig_io;
+    EXPECT_CALL(fh_mock, sigio(_)).Times(1).WillOnce(Invoke(&sig_io, &SigIo::sigio));
+    EXPECT_CALL(fh_mock, set_blocking(false)).WillOnce(Return(0));
+
+    obj.serial_attach(&fh_mock);
+
+    MuxCallbackTest callback;
+    obj.callback_attach(mbed::Callback<void(mbed::MuxBase::event_context_t &)>(&callback,
+                        &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
+
+    /* Send multiplexer open request within the call context. */
+
+    const uint8_t write_byte_mux_open[6] =
+    {
+        FLAG_SEQUENCE_OCTET,
+        ADDRESS_MUX_START_REQ_OCTET,
+        (FRAME_TYPE_SABM | PF_BIT),
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&write_byte_mux_open[1], 3u),
+        FLAG_SEQUENCE_OCTET
+    };
+    FileWrite write(&(write_byte_mux_open[0]), sizeof(write_byte_mux_open), sizeof(write_byte_mux_open));
+    EXPECT_CALL(fh_mock, write(NotNull(), sizeof(write_byte_mux_open)))
+                .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
+
+    /* Start frame write sequence gets completed, now start T1 timer. */
+    mbed_equeue_stub::call_in_expect(T1_TIMER_VALUE, 1);
+
+    const nsapi_error channel_open_err = obj.channel_open();
+    EXPECT_EQ(NSAPI_ERROR_OK, channel_open_err);
+
+    /* Receive multiplexer open response, and start TX of open user channel request. */
+
+    const uint8_t read_byte_mux_open[6] =
+    {
+        FLAG_SEQUENCE_OCTET,
+        ADDRESS_MUX_START_RESP_OCTET,
+        (FRAME_TYPE_UA | PF_BIT),
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&read_byte_mux_open[1], 3),
+        FLAG_SEQUENCE_OCTET
+    };
+    uint8_t dlci_id                          = (3u) | (1u << 2);
+    const uint8_t write_byte_channel_open[6] =
+    {
+        FLAG_SEQUENCE_OCTET,
+        dlci_id,
+        (FRAME_TYPE_SABM | PF_BIT),
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&write_byte_channel_open[1], 3),
+        FLAG_SEQUENCE_OCTET
+    };
+    self_iniated_response_rx(&(read_byte_mux_open[0]),
+                             &(write_byte_channel_open[0]),
+                             READ_FLAG_SEQUENCE_OCTET,
+                             STRIP_FLAG_FIELD_NO,
+                             ENQUEUE_DEFERRED_CALL_YES,
+                             fh_mock,
+                             sig_io);
+
+    /* Rx user data frame to invalidate ID DLCI: silently discarded by the implementation. */
+
+    const uint8_t user_data = 0xA5u;
+    dlci_id                 = DLCI_INVALID_ID;
+    uint8_t read_byte[6]    =
+    {
+        1u | (dlci_id << 2),
+        FRAME_TYPE_UIH,
+        LENGTH_INDICATOR_OCTET | (sizeof(user_data) << 1),
+        user_data,
+        fcs_calculate(&read_byte[0], 3u),
+        FLAG_SEQUENCE_OCTET
+    };
+    single_complete_read_cycle(&(read_byte[0]),
+                               sizeof(read_byte),
+                               RESUME_RX_CYCLE,
+                               &(write_byte_channel_open[1]),
+                               sizeof(write_byte_channel_open) - sizeof(write_byte_channel_open[1]),
+                               ENQUEUE_DEFERRED_CALL_YES,
+                               fh_mock,
+                               sig_io);
+
+    /* Finish the DLCI establishment procedure. */
+
+    /* Finish sending open channel request message. */
+    self_iniated_request_tx(&write_byte_channel_open[1], (SABM_FRAME_LEN - 1u), FRAME_HEADER_READ_LEN, fh_mock, sig_io);
+    /* Read the channel open response frame. */
+    callback.callback_arm();
+    const uint8_t read_byte_channel_open[5] =
+    {
+        (3u | (1u << 2)),
+        (FRAME_TYPE_UA | PF_BIT),
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&read_byte_channel_open[0], 3),
+        FLAG_SEQUENCE_OCTET
+    };
+    self_iniated_response_rx(&(read_byte_channel_open[0]),
+                             NULL,
+                             SKIP_FLAG_SEQUENCE_OCTET,
+                             STRIP_FLAG_FIELD_NO,
+                             ENQUEUE_DEFERRED_CALL_YES,
+                             fh_mock,
+                             sig_io);
+
+    /* Validate Filehandle generation. */
+    EXPECT_TRUE(callback.is_callback_called());
+    m_file_handle[0] = callback.file_handle_get();
+    EXPECT_TRUE(m_file_handle[0] != NULL);
+
+    m_file_handle[0]->sigio(user_rx_invalidate_dlci_id_used_callback);
+
+    /* Rx user data frame to invalidate ID DLCI: silently discarded by the implementation. */
+
+    single_complete_read_cycle(&(read_byte[0]),
+                               sizeof(read_byte),
+                               RESUME_RX_CYCLE,
+                               NULL,
+                               0,
+                               ENQUEUE_DEFERRED_CALL_YES,
+                               fh_mock,
+                               sig_io);
+
+    /* Validate proper callback callcount. */
+    EXPECT_EQ(0, m_user_rx_invalidate_dlci_id_used_check_value);
+
+    /* Rx user data frame to established DLCI: accepted by the implementation. */
+
+    dlci_id      = DLCI_ID_LOWER_BOUND;
+    read_byte[0] = 1u | (dlci_id << 2);
+    read_byte[4] = fcs_calculate(&read_byte[0], 3u);
+    single_complete_read_cycle(&(read_byte[0]),
+                               sizeof(read_byte),
+                               SUSPEND_RX_CYCLE,
+                               NULL,
+                               0,
+                               ENQUEUE_DEFERRED_CALL_YES,
+                               fh_mock,
+                               sig_io);
+
+    /* Validate proper callback callcount. */
+    EXPECT_EQ(1, m_user_rx_invalidate_dlci_id_used_check_value);
+
+    /* Validate read buffer. */
+    mbed_equeue_stub::call_expect(1);
+    uint8_t test_buffer[1] = {0};
+    ssize_t read_ret       = m_file_handle[0]->read(&(test_buffer[0]), 1u);
+    EXPECT_EQ(1, read_ret);
+    EXPECT_EQ(user_data, test_buffer[0]);
+    read_ret = m_file_handle[0]->read(&(test_buffer[0]), 1u);
+    EXPECT_EQ(-EAGAIN, read_ret);
+
+    /* Validate proper callback callcount. */
+    EXPECT_EQ(1, m_user_rx_invalidate_dlci_id_used_check_value);
 }

@@ -3685,3 +3685,57 @@ TEST_F(TestMux, user_rx_single_read)
     /* Validate proper callback callcount. */
     EXPECT_EQ(1, m_user_rx_single_read_check_value);
 }
+
+
+static void user_rx_single_read_no_data_available_callback()
+{
+    EXPECT_TRUE(false);
+}
+
+
+/*
+ * TC - Ensure the following for a single complete user data read request:
+ * - read request will return appropriate error to inform no data available for read
+ *
+ * Test sequence:
+ * - Establish 1 DLCI
+ * - Issue read request
+ *
+ * Expected outcome:
+ * - as specified in TC description
+ */
+TEST_F(TestMux, user_rx_single_read_no_data_available)
+{
+    InSequence dummy;
+
+    mbed::Mux3GPP obj;
+
+    events::EventQueue eq;
+    obj.eventqueue_attach(&eq);
+
+    MockFileHandle fh_mock;
+    SigIo          sig_io;
+    EXPECT_CALL(fh_mock, sigio(_)).Times(1).WillOnce(Invoke(&sig_io, &SigIo::sigio));
+    EXPECT_CALL(fh_mock, set_blocking(false)).WillOnce(Return(0));
+
+    obj.serial_attach(&fh_mock);
+
+    MuxCallbackTest callback;
+    obj.callback_attach(mbed::Callback<void(mbed::MuxBase::event_context_t &)>(&callback,
+                        &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
+
+    /* Establish a user channel. */
+
+    mux_self_iniated_open(callback, FRAME_TYPE_UA, obj, fh_mock, sig_io);
+
+    /* Validate Filehandle generation. */
+    EXPECT_TRUE(callback.is_callback_called());
+    m_file_handle[0] = callback.file_handle_get();
+    EXPECT_TRUE(m_file_handle[0] != NULL);
+
+    m_file_handle[0]->sigio(user_rx_single_read_no_data_available_callback);
+
+    uint8_t buffer[1]      = {0};
+    const ssize_t read_ret = m_file_handle[0]->read(&(buffer[0]), sizeof(buffer));
+    EXPECT_TRUE(read_ret == -EAGAIN);
+}

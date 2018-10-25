@@ -5129,3 +5129,140 @@ TEST_F(TestMux, rx_frame_type_uih_invalid_cr_and_pf_bit)
     /* Validate proper callback callcount. */
     EXPECT_EQ(1, m_rx_frame_type_uih_invalid_cr_and_pf_bit_check_value);
 }
+
+
+/*
+ * TC - Ensure proper behaviour when DM frame received with invalid C/R and P/F bit
+ *
+ * Test sequence:
+ * - Mux3GPP open
+ * - Send DLCI establishment request
+ * - Rx frame type DM received with invalid C/R bit: silently discarded by the implementation
+ * - Rx frame type DM received with invalid P/F bit: silently discarded by the implementation.
+ * - Valid Rx frame type DM received: starts expected processing within implementation
+ *
+ * Expected outcome:
+ * - Verify Rx frame type DM received with invalid C/R bit: silently discarded by the implementation
+ * - Verify Rx frame type UA received with invalid P/F bit: silently discarded by the implementation
+ * - Valid Rx frame type DM received: starts expected processing within implementation
+ */
+TEST_F(TestMux, rx_frame_type_dm_invalid_cr_and_pf_bit)
+{
+    InSequence dummy;
+
+    mbed::Mux3GPP obj;
+
+    events::EventQueue eq;
+    obj.eventqueue_attach(&eq);
+
+    MockFileHandle fh_mock;
+    SigIo          sig_io;
+    EXPECT_CALL(fh_mock, sigio(_)).Times(1).WillOnce(Invoke(&sig_io, &SigIo::sigio));
+    EXPECT_CALL(fh_mock, set_blocking(false)).WillOnce(Return(0));
+
+    obj.serial_attach(&fh_mock);
+
+    MuxCallbackTest callback;
+    obj.callback_attach(mbed::Callback<void(mbed::MuxBase::event_context_t &)>(&callback,
+                        &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
+
+    const uint8_t write_byte_mux_open[6] =
+    {
+        FLAG_SEQUENCE_OCTET,
+        ADDRESS_MUX_START_REQ_OCTET,
+        (FRAME_TYPE_SABM | PF_BIT),
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&write_byte_mux_open[1], 3),
+        FLAG_SEQUENCE_OCTET
+    };
+    FileWrite write(&(write_byte_mux_open[0]), sizeof(write_byte_mux_open), sizeof(write_byte_mux_open));
+    EXPECT_CALL(fh_mock, write(NotNull(), sizeof(write_byte_mux_open)))
+                .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
+
+    mbed_equeue_stub::call_in_expect(T1_TIMER_VALUE, 1);
+
+    /* Start test sequence. Test set mocks. */
+    const nsapi_error channel_open_err = obj.channel_open();
+    EXPECT_EQ(NSAPI_ERROR_OK, channel_open_err);
+
+    /* Read the mux open response frame. */
+    const uint8_t read_byte_mux_open[6] =
+    {
+        FLAG_SEQUENCE_OCTET,
+        ADDRESS_MUX_START_RESP_OCTET,
+        (FRAME_TYPE_UA | PF_BIT),
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&read_byte_mux_open[1], 3),
+        FLAG_SEQUENCE_OCTET
+    };
+    /* Reception of the mux open response frame starts the channel creation procedure. */
+    const uint32_t address                   = (3u) | (DLCI_ID_LOWER_BOUND << 2);
+    const uint8_t write_byte_channel_open[6] =
+    {
+        FLAG_SEQUENCE_OCTET,
+        address,
+        (FRAME_TYPE_SABM | PF_BIT),
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&write_byte_channel_open[1], 3),
+        FLAG_SEQUENCE_OCTET
+    };
+    peer_iniated_request_rx_full_frame_tx(READ_FLAG_SEQUENCE_OCTET, STRIP_FLAG_FIELD_NO,
+                                          &(read_byte_mux_open[0]), sizeof(read_byte_mux_open),
+                                          &(write_byte_channel_open[0]), sizeof(write_byte_channel_open),
+                                          CANCEL_TIMER_YES, START_TIMER_YES, fh_mock, sig_io);
+
+    /* Rx frame type DM received with invalid C/R bit: silently discarded by the implementation */
+
+    const uint8_t read_byte_invalid_cr_bit[5] =
+    {
+        1u | (DLCI_ID_LOWER_BOUND << 2),
+        (FRAME_TYPE_DM | PF_BIT),
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&read_byte_invalid_cr_bit[0], 3),
+        FLAG_SEQUENCE_OCTET
+    };
+    single_complete_read_cycle(&(read_byte_invalid_cr_bit[0]), sizeof(read_byte_invalid_cr_bit), RESUME_RX_CYCLE,
+                               NULL, 0, ENQUEUE_DEFERRED_CALL_YES, fh_mock, sig_io);
+
+    /* Rx frame type DM received with invalid P/F bit: silently discarded by the implementation. */
+
+    const uint8_t read_byte_invalid_pf_bit[5] =
+    {
+        3u | (DLCI_ID_LOWER_BOUND << 2),
+        FRAME_TYPE_DM,
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&read_byte_invalid_pf_bit[0], 3),
+        FLAG_SEQUENCE_OCTET
+    };
+    single_complete_read_cycle(&(read_byte_invalid_pf_bit[0]), sizeof(read_byte_invalid_pf_bit), RESUME_RX_CYCLE,
+                               NULL, 0, ENQUEUE_DEFERRED_CALL_YES, fh_mock, sig_io);
+
+    /* Valid Rx frame type DM received: starts expected processing within implementation */
+
+    const uint8_t read_byte_valid[5] =
+    {
+        3u | (DLCI_ID_LOWER_BOUND << 2),
+        (FRAME_TYPE_DM | PF_BIT),
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&read_byte_valid[0], 3),
+        FLAG_SEQUENCE_OCTET
+    };
+    callback.callback_arm();
+    self_iniated_response_rx(&(read_byte_valid[0]),
+                             NULL,
+                             SKIP_FLAG_SEQUENCE_OCTET,
+                             STRIP_FLAG_FIELD_NO,
+                             ENQUEUE_DEFERRED_CALL_YES,
+                             fh_mock,
+                             sig_io);
+
+    EXPECT_TRUE(callback.is_callback_called());
+    m_file_handle[0] = callback.file_handle_get();
+    EXPECT_EQ(NULL, m_file_handle[0]);
+
+    channel_open(DLCI_ID_LOWER_BOUND, callback, ENQUEUE_DEFERRED_CALL_YES, obj, fh_mock, sig_io);
+
+    EXPECT_TRUE(callback.is_callback_called());
+    m_file_handle[0] = callback.file_handle_get();
+    EXPECT_TRUE(m_file_handle[0] != NULL);
+}

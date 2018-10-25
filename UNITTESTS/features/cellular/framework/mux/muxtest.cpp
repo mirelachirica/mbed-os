@@ -5266,3 +5266,109 @@ TEST_F(TestMux, rx_frame_type_dm_invalid_cr_and_pf_bit)
     m_file_handle[0] = callback.file_handle_get();
     EXPECT_TRUE(m_file_handle[0] != NULL);
 }
+
+
+/*
+ * TC - Ensure proper behaviour when DISC frame received with invalid C/R and P/F bit to a DLCI which is not open
+ *
+ * Test sequence:
+ * - Establish a channel
+ * - DISC received to non established DLCI ID with invalid C/R bit: silently discarded by the implementation.
+ * - DISC received to non established DLCI ID with invalid P/F bit: silently discarded by the implementation.
+ * - Valid DISC received to non established DLCI ID: starts expected processing within implementation
+ *
+ * Expected outcome:
+ * - As specified above
+ */
+TEST_F(TestMux, rx_frame_type_disc_invalid_cr_and_pf_bit)
+{
+    InSequence dummy;
+
+    mbed::Mux3GPP obj;
+
+    events::EventQueue eq;
+    obj.eventqueue_attach(&eq);
+
+    MockFileHandle fh_mock;
+    SigIo          sig_io;
+    EXPECT_CALL(fh_mock, sigio(_)).Times(1).WillOnce(Invoke(&sig_io, &SigIo::sigio));
+    EXPECT_CALL(fh_mock, set_blocking(false)).WillOnce(Return(0));
+
+    obj.serial_attach(&fh_mock);
+
+    MuxCallbackTest callback;
+    obj.callback_attach(mbed::Callback<void(mbed::MuxBase::event_context_t &)>(&callback,
+                        &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
+
+    /* Establish a user channel. */
+
+    mux_self_iniated_open(callback, FRAME_TYPE_UA, obj, fh_mock, sig_io);
+
+    /* Validate Filehandle generation. */
+    EXPECT_TRUE(callback.is_callback_called());
+    m_file_handle[0] = callback.file_handle_get();
+    EXPECT_TRUE(m_file_handle[0] != NULL);
+
+    /* DISC received to non established DLCI ID with invalid C/R bit: silently discarded by the implementation. */
+
+    const uint8_t read_byte_invalid_cr_bit[5] =
+    {
+        1u | CR_BIT | ((DLCI_ID_LOWER_BOUND + 1u) << 2),
+        (FRAME_TYPE_DISC | PF_BIT),
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&read_byte_invalid_cr_bit[0], 3u),
+        FLAG_SEQUENCE_OCTET
+    };
+    peer_iniated_request_rx(&(read_byte_invalid_cr_bit[0]),
+                            SKIP_FLAG_SEQUENCE_OCTET,
+                            NULL,   // No TX response frame within the RX cycle.
+                            NULL,   // No current frame in the TX pipeline.
+                            0,
+                            fh_mock,
+                            sig_io);
+
+    /* DISC received to to non established DLCI ID with invalid P/F bit: silently discarded by the implementation. */
+
+    const uint8_t read_byte_invalid_pf_bit[5] =
+    {
+        1u | ((DLCI_ID_LOWER_BOUND + 1u) << 2),
+        FRAME_TYPE_DISC,
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&read_byte_invalid_pf_bit[0], 3u),
+        FLAG_SEQUENCE_OCTET
+    };
+    peer_iniated_request_rx(&(read_byte_invalid_pf_bit[0]),
+                            SKIP_FLAG_SEQUENCE_OCTET,
+                            NULL,   // No TX response frame within the RX cycle.
+                            NULL,   // No current frame in the TX pipeline.
+                            0,
+                            fh_mock,
+                            sig_io);
+
+    /* Valid DISC received: starts expected processing within implementation. */
+
+    const uint8_t read_byte_valid[5] =
+    {
+        1u | ((DLCI_ID_LOWER_BOUND + 1u) << 2),
+        (FRAME_TYPE_DISC | PF_BIT),
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&read_byte_valid[0], 3u),
+        FLAG_SEQUENCE_OCTET
+    };
+    const uint8_t write_byte[6] =
+    {
+        FLAG_SEQUENCE_OCTET,
+        1u | ((DLCI_ID_LOWER_BOUND + 1u) << 2),
+        (FRAME_TYPE_DM | PF_BIT),
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&write_byte[1], 3u),
+        FLAG_SEQUENCE_OCTET
+    };
+    peer_iniated_request_rx(&(read_byte_valid[0]),
+                            SKIP_FLAG_SEQUENCE_OCTET,
+                            &(write_byte[0]),   // TX response frame within the RX cycle.
+                            NULL,               // No current frame in the TX pipeline.
+                            0,
+                            fh_mock,
+                            sig_io);
+}

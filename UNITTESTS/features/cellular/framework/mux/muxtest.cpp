@@ -4723,3 +4723,78 @@ TEST_F(TestMux, rx_frame_type_not_supported)
     /* Validate proper callback callcount. */
     EXPECT_EQ(1, m_rx_frame_type_not_supported_check_value);
 }
+
+
+/*
+ * TC - Ensure proper behaviour when Rx frame type UA received when no SABM has been send
+ * Test sequence:
+ * - Mux3GPP open
+ * - Establish 1st DLCI
+ * - Rx frame type UA received, without pending SABM frame, to the established DLCI: silently discarded by the
+ *   implementation
+ * - Establish 2nd DLCI
+ *
+ * Expected outcome:
+ * - Rx frame type UA received is dropped by the implementation
+ * - Validate DLCI establishment
+ */
+TEST_F(TestMux, rx_frame_type_ua_when_no_sabm_send)
+{
+    InSequence dummy;
+
+    mbed::Mux3GPP obj;
+
+    events::EventQueue eq;
+    obj.eventqueue_attach(&eq);
+
+    MockFileHandle fh_mock;
+    SigIo          sig_io;
+    EXPECT_CALL(fh_mock, sigio(_)).Times(1).WillOnce(Invoke(&sig_io, &SigIo::sigio));
+    EXPECT_CALL(fh_mock, set_blocking(false)).WillOnce(Return(0));
+
+    obj.serial_attach(&fh_mock);
+
+    MuxCallbackTest callback;
+    obj.callback_attach(mbed::Callback<void(mbed::MuxBase::event_context_t &)>(&callback,
+                        &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
+
+    /* Establish a user channel. */
+
+    mux_self_iniated_open(callback, FRAME_TYPE_UA, obj, fh_mock, sig_io);
+
+    /* Validate Filehandle generation. */
+    EXPECT_TRUE(callback.is_callback_called());
+    m_file_handle[0] = callback.file_handle_get();
+    EXPECT_TRUE(m_file_handle[0] != NULL);
+
+    m_file_handle[0]->sigio(NULL);
+
+    /* Rx frame type UA received, without pending SABM frame, to the established DLCI: silently discarded by the
+       implementation. */
+    const uint8_t dlci_id      = DLCI_ID_LOWER_BOUND;
+    const uint8_t read_byte[5] =
+    {
+        3u | (dlci_id << 2),
+        (FRAME_TYPE_UA | PF_BIT),
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&read_byte[0], 3u),
+        FLAG_SEQUENCE_OCTET
+    };
+    single_complete_read_cycle(&(read_byte[0]),
+                               sizeof(read_byte),
+                               RESUME_RX_CYCLE,
+                               NULL,
+                               0,
+                               ENQUEUE_DEFERRED_CALL_YES,
+                               fh_mock,
+                               sig_io);
+
+    /* Establish 2nd DLCI. */
+
+    channel_open((dlci_id + 1u), callback, ENQUEUE_DEFERRED_CALL_YES, obj, fh_mock, sig_io);
+
+    /* Validate Filehandle generation. */
+    EXPECT_TRUE(callback.is_callback_called());
+    m_file_handle[1] = callback.file_handle_get();
+    EXPECT_TRUE(m_file_handle[1] != NULL);
+}

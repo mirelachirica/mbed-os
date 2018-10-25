@@ -5567,3 +5567,93 @@ TEST_F(TestMux, rx_frame_type_ua_dlci_id_mismatch)
     EXPECT_TRUE(callback.is_callback_called());
     EXPECT_TRUE(callback.file_handle_get() != NULL);
 }
+
+
+/*
+ * TC - Ensure proper behaviour when DM frame received to pending SABM request and there is a DLCI ID mismatch
+ *
+ * Test sequence:
+ * - Send SABM frame
+ * - Receive DM frame which has a different DLCI ID than the SABM frame: silently discarded
+ * - Receive valid DM frame: establishment rejected
+ *
+ * Expected outcome:
+ * - As specified above
+ */
+TEST_F(TestMux, rx_frame_type_dm_dlci_id_mismatch)
+{
+    InSequence dummy;
+
+    mbed::Mux3GPP obj;
+
+    events::EventQueue eq;
+    obj.eventqueue_attach(&eq);
+
+    MockFileHandle fh_mock;
+    SigIo          sig_io;
+    EXPECT_CALL(fh_mock, sigio(_)).Times(1).WillOnce(Invoke(&sig_io, &SigIo::sigio));
+    EXPECT_CALL(fh_mock, set_blocking(false)).WillOnce(Return(0));
+
+    obj.serial_attach(&fh_mock);
+
+    MuxCallbackTest callback;
+    obj.callback_attach(mbed::Callback<void(mbed::MuxBase::event_context_t &)>(&callback,
+                        &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
+
+    const uint8_t write_byte_mux_open[6] =
+    {
+        FLAG_SEQUENCE_OCTET,
+        ADDRESS_MUX_START_REQ_OCTET,
+        (FRAME_TYPE_SABM | PF_BIT),
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&write_byte_mux_open[1], 3),
+        FLAG_SEQUENCE_OCTET
+    };
+    FileWrite write(&(write_byte_mux_open[0]), sizeof(write_byte_mux_open), sizeof(write_byte_mux_open));
+    EXPECT_CALL(fh_mock, write(NotNull(), sizeof(write_byte_mux_open)))
+                .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
+
+    mbed_equeue_stub::call_in_expect(T1_TIMER_VALUE, 1);
+
+    /* Start test sequence. Test set mocks. */
+    const nsapi_error channel_open_err = obj.channel_open();
+    EXPECT_EQ(NSAPI_ERROR_OK, channel_open_err);
+
+    /* Receive DM frame which has a different DLCI ID than the SABM frame: silently discarded. */
+
+    const uint8_t read_byte_invalid_dlci_id[6] =
+    {
+        FLAG_SEQUENCE_OCTET,
+        (1u | CR_BIT | (DLCI_ID_LOWER_BOUND << 2)),
+        (FRAME_TYPE_DM | PF_BIT),
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&read_byte_invalid_dlci_id[1], 3),
+        FLAG_SEQUENCE_OCTET
+    };
+    peer_iniated_request_rx(&(read_byte_invalid_dlci_id[0]),
+                            READ_FLAG_SEQUENCE_OCTET,
+                            NULL,   // No TX response frame within the RX cycle.
+                            NULL,   // No current frame in the TX pipeline.
+                            0,
+                            fh_mock,
+                            sig_io);
+
+    /* Receive valid DM frame: establishment rejected. */
+
+    const uint8_t read_byte[5] =
+    {
+        (1u | CR_BIT),
+        (FRAME_TYPE_DM | PF_BIT),
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&read_byte[0], 3),
+        FLAG_SEQUENCE_OCTET
+    };
+    callback.callback_arm();
+    self_iniated_response_rx(&(read_byte[0]), NULL, SKIP_FLAG_SEQUENCE_OCTET, STRIP_FLAG_FIELD_NO,
+                             ENQUEUE_DEFERRED_CALL_YES, fh_mock, sig_io);
+
+    /* Validate Filehandle generation. */
+    EXPECT_TRUE(callback.is_callback_called());
+    mbed::FileHandle *fh = callback.file_handle_get();
+    EXPECT_EQ(NULL, fh);
+}

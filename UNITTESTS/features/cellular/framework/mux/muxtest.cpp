@@ -847,20 +847,13 @@ void peer_iniated_request_rx(const uint8_t            *rx_buf,
         EXPECT_CALL(fh, write(NotNull(), (length_of_frame - 1u)))
                     .WillOnce(Invoke(&write_3, &FileWrite::write)).RetiresOnSaturation();
     } else if (current_tx_write_byte != NULL) {
-ASSERT_TRUE(false);
+        /* Resume the Rx cycle and stop it. */
+        EXPECT_CALL(fh, read(NotNull(), FRAME_HEADER_READ_LEN)).WillOnce(Return(-EAGAIN)).RetiresOnSaturation();
+
         /* End TX sequence for the current byte in the TX pipeline: this call originates from on_deferred_call(). */
         FileWrite write(&(current_tx_write_byte[0]), current_tx_write_byte_len, 0);
         EXPECT_CALL(fh, write(NotNull(), current_tx_write_byte_len))
                     .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
-#if 0
-        mock_write = mock_free_get("write");
-        CHECK(mock_write != NULL);
-        mock_write->input_param[0].compare_type = MOCK_COMPARE_TYPE_VALUE;
-        mock_write->input_param[0].param        = (uint32_t)&(current_tx_write_byte[0]);
-        mock_write->input_param[1].param        = current_tx_write_byte_len;
-        mock_write->input_param[1].compare_type = MOCK_COMPARE_TYPE_VALUE;
-        mock_write->return_value                = 0;
-#endif
     } else {
         /* Resume the Rx cycle and stop it. */
         EXPECT_CALL(fh, read(NotNull(), FRAME_HEADER_READ_LEN)).WillOnce(Return(-EAGAIN)).RetiresOnSaturation();
@@ -5369,6 +5362,92 @@ TEST_F(TestMux, rx_frame_type_disc_invalid_cr_and_pf_bit)
                             &(write_byte[0]),   // TX response frame within the RX cycle.
                             NULL,               // No current frame in the TX pipeline.
                             0,
+                            fh_mock,
+                            sig_io);
+}
+
+
+/*
+ * TC - Ensure proper behaviour when DISC frame received to non-open DLCI while TX is in progress
+ *
+ * Test sequence:
+ * - Establish a channel
+ * - Write user data to established DLCI: TX not finished
+ * - Valid DISC received to non-open DLCI: starts expected processing within implementation
+ *
+ * Expected outcome:
+ * - As specified above
+ */
+TEST_F(TestMux, rx_frame_type_disc_while_tx_in_progress)
+{
+    InSequence dummy;
+
+    mbed::Mux3GPP obj;
+
+    events::EventQueue eq;
+    obj.eventqueue_attach(&eq);
+
+    MockFileHandle fh_mock;
+    SigIo          sig_io;
+    EXPECT_CALL(fh_mock, sigio(_)).Times(1).WillOnce(Invoke(&sig_io, &SigIo::sigio));
+    EXPECT_CALL(fh_mock, set_blocking(false)).WillOnce(Return(0));
+
+    obj.serial_attach(&fh_mock);
+
+    MuxCallbackTest callback;
+    obj.callback_attach(mbed::Callback<void(mbed::MuxBase::event_context_t &)>(&callback,
+                        &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
+
+    /* Establish a user channel. */
+
+    mux_self_iniated_open(callback, FRAME_TYPE_UA, obj, fh_mock, sig_io);
+
+    /* Validate Filehandle generation. */
+    EXPECT_TRUE(callback.is_callback_called());
+    m_file_handle[0] = callback.file_handle_get();
+    EXPECT_TRUE(m_file_handle[0] != NULL);
+
+    m_file_handle[0]->sigio(NULL);
+
+    /* Write user data to established DLCI: TX not finished. */
+
+    const uint8_t user_data         = 0xA5u;
+    const uint8_t write_byte_uih[7] =
+    {
+        FLAG_SEQUENCE_OCTET,
+        3u | (DLCI_ID_LOWER_BOUND << 2),
+        FRAME_TYPE_UIH,
+        LENGTH_INDICATOR_OCTET | (sizeof(user_data) << 1),
+        user_data,
+        fcs_calculate(&write_byte_uih[1], 3u),
+        FLAG_SEQUENCE_OCTET
+    };
+    FileWrite write(&(write_byte_uih[0]), sizeof(write_byte_uih), 1);
+    EXPECT_CALL(fh_mock, write(NotNull(), sizeof(write_byte_uih)))
+                .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
+    /* End TX cycle. */
+    EXPECT_CALL(fh_mock, write(NotNull(), sizeof(write_byte_uih) - sizeof(write_byte_uih[0])))
+                .WillOnce(Return(0)).RetiresOnSaturation();
+
+    const ssize_t write_ret = m_file_handle[0]->write(&user_data, sizeof(user_data));
+    EXPECT_EQ(sizeof(user_data), write_ret);
+
+    /* Valid DISC received: starts expected processing within implementation. */
+
+    const uint8_t read_byte[5] =
+    {
+        1u | ((DLCI_ID_LOWER_BOUND + 1u) << 2),
+        (FRAME_TYPE_DISC | PF_BIT),
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&read_byte[0], 3u),
+        FLAG_SEQUENCE_OCTET
+    };
+    /* Generate DISC from peer which is ignored buy the implementation. */
+    peer_iniated_request_rx(&(read_byte[0]),
+                            SKIP_FLAG_SEQUENCE_OCTET,
+                            NULL,                   // No TX response frame within the RX cycle.
+                            &(write_byte_uih[1]),   // Continue current frame TX in the TX pipeline.
+                            sizeof(write_byte_uih) - sizeof(write_byte_uih[0]),
                             fh_mock,
                             sig_io);
 }

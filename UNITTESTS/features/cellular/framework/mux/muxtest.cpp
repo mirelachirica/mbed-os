@@ -5006,3 +5006,126 @@ TEST_F(TestMux, rx_frame_type_ua_invalid_cr_and_pf_bit)
     m_file_handle[0] = callback.file_handle_get();
     EXPECT_TRUE(m_file_handle[0] != NULL);
 }
+
+
+static uint8_t m_rx_frame_type_uih_invalid_cr_and_pf_bit_check_value = 0;
+static void rx_frame_type_uih_invalid_cr_and_pf_bit_callback()
+{
+    ++m_rx_frame_type_uih_invalid_cr_and_pf_bit_check_value;
+}
+
+
+/*
+ * TC - Ensure proper behaviour when user data Rx frame received with invalid P/F bit
+ *
+ * Test sequence:
+ * - Mux3GPP open
+ * - Establish a DLCI
+ * - Rx user data frame with invalid P/F bit: silently discarded by the implementation
+ * - Rx user data frame with invalid C/R bit: silently discarded by the implementation
+ * - Rx user data frame, whic is valid: accepted by the implementation.
+ *
+ * Expected outcome:
+ * - The invalid P/F bit Rx frame is dropped by the implementation
+ * - The invalid C/R bit Rx frame is dropped by the implementation
+ * - The valid P/F bit Rx frame is accepted by the implementation
+ * - Validate proper callback callcount
+ * - Validate read buffer
+ */
+TEST_F(TestMux, rx_frame_type_uih_invalid_cr_and_pf_bit)
+{
+    m_rx_frame_type_uih_invalid_cr_and_pf_bit_check_value = 0;
+
+    InSequence dummy;
+
+    mbed::Mux3GPP obj;
+
+    events::EventQueue eq;
+    obj.eventqueue_attach(&eq);
+
+    MockFileHandle fh_mock;
+    SigIo          sig_io;
+    EXPECT_CALL(fh_mock, sigio(_)).Times(1).WillOnce(Invoke(&sig_io, &SigIo::sigio));
+    EXPECT_CALL(fh_mock, set_blocking(false)).WillOnce(Return(0));
+
+    obj.serial_attach(&fh_mock);
+
+    MuxCallbackTest callback;
+    obj.callback_attach(mbed::Callback<void(mbed::MuxBase::event_context_t &)>(&callback,
+                        &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
+
+    /* Establish a user channel. */
+
+    mux_self_iniated_open(callback, FRAME_TYPE_UA, obj, fh_mock, sig_io);
+
+    /* Validate Filehandle generation. */
+    EXPECT_TRUE(callback.is_callback_called());
+    m_file_handle[0] = callback.file_handle_get();
+    EXPECT_TRUE(m_file_handle[0] != NULL);
+
+    m_file_handle[0]->sigio(rx_frame_type_uih_invalid_cr_and_pf_bit_callback);
+
+    /* Rx user data frame with invalid P/F bit: silently discarded by the implementation. */
+
+    const uint8_t user_data                   = 0xA5u;
+    const uint8_t dlci_id                     = DLCI_ID_LOWER_BOUND;
+    const uint8_t read_byte_invalid_pf_bit[6] =
+    {
+        1u | (dlci_id << 2),
+        (FRAME_TYPE_UIH | PF_BIT),
+        LENGTH_INDICATOR_OCTET | (sizeof(user_data) << 1),
+        user_data,
+        fcs_calculate(&read_byte_invalid_pf_bit[0], 3u),
+        FLAG_SEQUENCE_OCTET
+    };
+    single_complete_read_cycle(&(read_byte_invalid_pf_bit[0]), sizeof(read_byte_invalid_pf_bit), RESUME_RX_CYCLE,
+                               NULL, 0, ENQUEUE_DEFERRED_CALL_YES, fh_mock, sig_io);
+
+    /* Validate proper callback callcount. */
+    EXPECT_EQ(0, m_rx_frame_type_uih_invalid_cr_and_pf_bit_check_value);
+
+    /* Rx user data frame with invalid C/R bit: silently discarded by the implementation. */
+
+    const uint8_t read_byte_invalid_cr_bit[6] =
+    {
+        1u | CR_BIT | (dlci_id << 2),
+        FRAME_TYPE_UIH,
+        LENGTH_INDICATOR_OCTET | (sizeof(user_data) << 1),
+        user_data,
+        fcs_calculate(&read_byte_invalid_cr_bit[0], 3u),
+        FLAG_SEQUENCE_OCTET
+    };
+    single_complete_read_cycle(&(read_byte_invalid_cr_bit[0]), sizeof(read_byte_invalid_cr_bit), RESUME_RX_CYCLE,
+                               NULL, 0, ENQUEUE_DEFERRED_CALL_YES, fh_mock, sig_io);
+
+    /* Validate proper callback callcount. */
+    EXPECT_EQ(0, m_rx_frame_type_uih_invalid_cr_and_pf_bit_check_value);
+
+    /* Valid Rx user data frame: accepted by the implementation. */
+
+    const uint8_t read_byte_valid[6] =
+    {
+        1u | (dlci_id << 2),
+        FRAME_TYPE_UIH,
+        LENGTH_INDICATOR_OCTET | (sizeof(user_data) << 1),
+        user_data,
+        fcs_calculate(&read_byte_valid[0], 3u),
+        FLAG_SEQUENCE_OCTET
+    };
+    single_complete_read_cycle(&(read_byte_valid[0]), sizeof(read_byte_valid), SUSPEND_RX_CYCLE,
+                               NULL, 0, ENQUEUE_DEFERRED_CALL_YES, fh_mock, sig_io);
+
+    /* Validate proper callback callcount. */
+    EXPECT_EQ(1, m_rx_frame_type_uih_invalid_cr_and_pf_bit_check_value);
+
+    /* Validate read buffer. */
+    mbed_equeue_stub::call_expect(1);
+    uint8_t test_buffer[1]  = {0};
+    ssize_t read_ret        = m_file_handle[0]->read(&(test_buffer[0]), 1u);
+    EXPECT_EQ(1, read_ret);
+    EXPECT_EQ(user_data, test_buffer[0]);
+    read_ret = m_file_handle[0]->read(&(test_buffer[0]), 1u);
+    EXPECT_EQ(-EAGAIN, read_ret);
+    /* Validate proper callback callcount. */
+    EXPECT_EQ(1, m_rx_frame_type_uih_invalid_cr_and_pf_bit_check_value);
+}

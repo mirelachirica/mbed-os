@@ -6119,3 +6119,125 @@ TEST_F(TestMux, channel_open_inside_the_channel_open_callback_mux_open_timeout)
     /* Verify correct callback count. */
     EXPECT_EQ(2, callback.completion_count_get());
 }
+
+
+static uint8_t m_poll_check_value;
+static void poll_file_handle_callback()
+{
+    ++m_poll_check_value;
+}
+
+
+/*
+ * TC - Ensure proper behaviour of the poll API
+ *
+ * Test sequence:
+ * - Call poll when POLLOUT
+ * - Call poll when POLLOUT | POLLIN
+ * - Call poll when POLLIN
+ * - Call poll when no POLLOUT or POLLIN
+ *
+ * Expected outcome:
+ * - As specified above
+ */
+TEST_F(TestMux, poll)
+{
+    m_poll_check_value = 0;
+
+    InSequence dummy;
+
+    mbed::Mux3GPP obj;
+
+    events::EventQueue eq;
+    obj.eventqueue_attach(&eq);
+
+    MockFileHandle fh_mock;
+    SigIo          sig_io;
+    EXPECT_CALL(fh_mock, sigio(_)).Times(1).WillOnce(Invoke(&sig_io, &SigIo::sigio));
+    EXPECT_CALL(fh_mock, set_blocking(false)).WillOnce(Return(0));
+
+    obj.serial_attach(&fh_mock);
+
+    MuxCallbackTest callback;
+    obj.callback_attach(mbed::Callback<void(mbed::MuxBase::event_context_t &)>(&callback,
+                        &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
+
+    /* Establish a user channel. */
+
+    mux_self_iniated_open(callback, FRAME_TYPE_UA, STOP_RX_CYCLE_YES, obj, fh_mock, sig_io);
+
+    /* Validate Filehandle generation. */
+    EXPECT_TRUE(callback.is_callback_called());
+    mbed::FileHandle *fh = callback.file_handle_get();
+    EXPECT_TRUE(fh != NULL);
+
+    fh->sigio(poll_file_handle_callback);
+
+    /* Call poll when POLLOUT. */
+
+    short events = fh->poll(0);
+    EXPECT_EQ(POLLOUT, events);
+
+    /* Call poll when POLLOUT | POLLIN. */
+
+    /* Start read cycle for the DLCI. */
+    const uint8_t user_data    = 0xA5u;
+    const uint8_t read_byte[6] =
+    {
+        1u | (DLCI_ID_LOWER_BOUND << 2),
+        FRAME_TYPE_UIH,
+        LENGTH_INDICATOR_OCTET | (sizeof(user_data) << 1),
+        user_data,
+        fcs_calculate(&read_byte[0], 3u),
+        FLAG_SEQUENCE_OCTET
+    };
+
+    /* Rx user data is not read within callback context, thus Rx is suspended. */
+    single_complete_read_cycle(&(read_byte[0]),
+                               sizeof(read_byte),
+                               SUSPEND_RX_CYCLE,
+                               NULL,
+                               0,
+                               ENQUEUE_DEFERRED_CALL_YES,
+                               fh_mock,
+                               sig_io);
+
+    /* Validate proper callback callcount. */
+    EXPECT_EQ(1, m_poll_check_value);
+
+    events = fh->poll(0);
+    EXPECT_EQ((POLLOUT | POLLIN), events);
+
+    /* Call poll when POLLIN. */
+
+    /* Program write cycle. */
+    const uint8_t write_byte[7] =
+    {
+        FLAG_SEQUENCE_OCTET,
+        3u | (DLCI_ID_LOWER_BOUND << 2),
+        FRAME_TYPE_UIH,
+        LENGTH_INDICATOR_OCTET | (sizeof(user_data) << 1),
+        user_data,
+        fcs_calculate(&write_byte[1], 3u),
+        FLAG_SEQUENCE_OCTET
+    };
+    EXPECT_CALL(fh_mock, write(NotNull(), sizeof(write_byte))).WillOnce(Return(0)).RetiresOnSaturation();
+
+    const ssize_t write_ret = fh->write(&user_data, sizeof(user_data));
+    EXPECT_EQ(sizeof(user_data), write_ret);
+
+    events = fh->poll(0);
+    EXPECT_EQ(POLLIN, events);
+
+    /* Call poll when no POLLOUT or POLLIN. */
+
+    mbed_equeue_stub::call_expect(1);
+
+    uint8_t test_buffer[1] = {0};
+    const ssize_t read_ret = fh->read(&(test_buffer[0]), 1u);
+    EXPECT_EQ(1, read_ret);
+    EXPECT_EQ(user_data, test_buffer[0]);
+
+    events = fh->poll(0);
+    EXPECT_EQ(0, events);
+}

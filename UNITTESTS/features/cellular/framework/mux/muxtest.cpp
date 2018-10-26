@@ -5793,3 +5793,133 @@ TEST_F(TestMux, channel_open_inside_the_channel_open_callback)
     /* Verify correct callback count. */
     EXPECT_EQ(2, callback.completion_count_get());
 }
+
+
+class ChannelOpenInsideCallbackDmReceivedTest : public MuxCallbackTest {
+
+public:
+
+    ChannelOpenInsideCallbackDmReceivedTest(mbed::Mux3GPP  &obj, MockFileHandle &fh) :
+                                            _completion_count(0), _fh(fh), _obj(obj) {};
+
+    virtual void channel_open_run(mbed::MuxBase::event_context_t &ev);
+    uint8_t completion_count_get() {return _completion_count;}
+
+private:
+
+    uint8_t         _completion_count;
+    MockFileHandle &_fh;
+    mbed::Mux3GPP  &_obj;
+};
+
+
+void ChannelOpenInsideCallbackDmReceivedTest::channel_open_run(mbed::MuxBase::event_context_t &ev)
+{
+    EXPECT_TRUE(_is_armed);
+    EXPECT_EQ(mbed::MuxBase::EVENT_TYPE_OPEN, ev.event);
+    _is_armed = false;
+
+    ++_completion_count;
+
+    switch (_completion_count) {
+        uint32_t    address;
+        nsapi_error channel_open_err;
+        case 1:
+            EXPECT_EQ(NULL, ev.data.fh);
+
+            /* Program completion function to start new user channel establishment procedure upon return.*/
+
+            address                                         = 3u | (DLCI_ID_LOWER_BOUND << 2);
+            // @note: static needed as needs to be valid after function returns.
+            static const uint8_t write_byte_channel_open[6] =
+            {
+                FLAG_SEQUENCE_OCTET,
+                address,
+                (FRAME_TYPE_SABM | PF_BIT),
+                LENGTH_INDICATOR_OCTET,
+                fcs_calculate(&write_byte_channel_open[1], 3),
+                FLAG_SEQUENCE_OCTET
+            };
+            static FileWrite write(&(write_byte_channel_open[0]),
+                                   sizeof(write_byte_channel_open),
+                                   sizeof(write_byte_channel_open));
+            EXPECT_CALL(_fh, write(NotNull(), sizeof(write_byte_channel_open)))
+                        .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
+
+            mbed_equeue_stub::call_in_expect(T1_TIMER_VALUE, 1);
+
+            /* Resume the Rx cycle and stop it. */
+            EXPECT_CALL(_fh, read(NotNull(), FRAME_HEADER_READ_LEN)).WillOnce(Return(-EAGAIN)).RetiresOnSaturation();
+
+            /* New request will set the operation pending, which will be started when this function returns. */
+            channel_open_err = _obj.channel_open();
+            EXPECT_EQ(NSAPI_ERROR_OK, channel_open_err);
+
+            break;
+        case 2:
+            EXPECT_TRUE(ev.data.fh != NULL);
+
+            break;
+        default:
+            EXPECT_TRUE(false);
+
+            break;
+    }
+}
+
+/*
+ * TC - Ensure proper behaviour when user channel creation is rejected by the peer and new user channel open is issued
+ *      in the operation completion callback callback.
+ *
+ * Test sequence:
+ * - Start user user channel establishment procedure, which is rejected by the peer
+ * - Inside the channel open callback issue a new user channel open request
+ * - Receive a open user channel response message
+ *
+ * Expected outcome:
+ * - As specified above
+ */
+TEST_F(TestMux, channel_open_inside_the_channel_open_callback_dm_received)
+{
+    InSequence dummy;
+
+    mbed::Mux3GPP obj;
+
+    events::EventQueue eq;
+    obj.eventqueue_attach(&eq);
+
+    MockFileHandle fh_mock;
+    SigIo          sig_io;
+    EXPECT_CALL(fh_mock, sigio(_)).Times(1).WillOnce(Invoke(&sig_io, &SigIo::sigio));
+    EXPECT_CALL(fh_mock, set_blocking(false)).WillOnce(Return(0));
+
+    obj.serial_attach(&fh_mock);
+
+    ChannelOpenInsideCallbackDmReceivedTest callback(obj, fh_mock);
+    obj.callback_attach(mbed::Callback<void(mbed::MuxBase::event_context_t &)>(&callback,
+                        &ChannelOpenInsideCallbackDmReceivedTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
+
+    /* Establish a user channel. */
+
+    mux_self_iniated_open(callback, FRAME_TYPE_DM, STOP_RX_CYCLE_NO, obj, fh_mock, sig_io);
+
+    /* Verify correct callback count. */
+    EXPECT_EQ(1, callback.completion_count_get());
+
+    /* Read the channel open response frame. */
+    const uint32_t address                  = 3u | (DLCI_ID_LOWER_BOUND << 2);
+    const uint8_t read_byte_channel_open[5] =
+    {
+        address,
+        (FRAME_TYPE_UA | PF_BIT),
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&read_byte_channel_open[0], 3),
+        FLAG_SEQUENCE_OCTET
+    };
+    callback.callback_arm();
+    self_iniated_response_rx(&(read_byte_channel_open[0]), NULL, SKIP_FLAG_SEQUENCE_OCTET, STRIP_FLAG_FIELD_NO,
+                             ENQUEUE_DEFERRED_CALL_YES, STOP_RX_CYCLE_YES, fh_mock, sig_io);
+
+    /* Verify correct callback count. */
+    EXPECT_EQ(2, callback.completion_count_get());
+}

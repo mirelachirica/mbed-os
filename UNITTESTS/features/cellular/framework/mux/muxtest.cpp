@@ -5923,3 +5923,199 @@ TEST_F(TestMux, channel_open_inside_the_channel_open_callback_dm_received)
     /* Verify correct callback count. */
     EXPECT_EQ(2, callback.completion_count_get());
 }
+
+
+class ChannelOpenInsideCallbackMuxOpenTimeoutTest : public MuxCallbackTest {
+
+public:
+
+    ChannelOpenInsideCallbackMuxOpenTimeoutTest(mbed::Mux3GPP  &obj, MockFileHandle &fh) :
+                                                _completion_count(0), _fh(fh), _obj(obj) {};
+
+    virtual void channel_open_run(mbed::MuxBase::event_context_t &ev);
+    uint8_t completion_count_get() {return _completion_count;}
+
+private:
+
+    uint8_t         _completion_count;
+    MockFileHandle &_fh;
+    mbed::Mux3GPP  &_obj;
+};
+
+
+void ChannelOpenInsideCallbackMuxOpenTimeoutTest::channel_open_run(mbed::MuxBase::event_context_t &ev)
+{
+    EXPECT_TRUE(_is_armed);
+    EXPECT_EQ(mbed::MuxBase::EVENT_TYPE_OPEN, ev.event);
+    _is_armed = false;
+
+    ++_completion_count;
+
+    switch (_completion_count) {
+        nsapi_error channel_open_err;
+        case 1:
+            EXPECT_EQ(NULL, ev.data.fh);
+            /* Program completion function to start new user channel establishment procedure upon return.*/
+
+            // @note: static needed as needs to be valid after function returns.
+            static const uint8_t write_byte_mux_open[6] =
+            {
+                FLAG_SEQUENCE_OCTET,
+                ADDRESS_MUX_START_REQ_OCTET,
+                (FRAME_TYPE_SABM | PF_BIT),
+                LENGTH_INDICATOR_OCTET,
+                fcs_calculate(&write_byte_mux_open[1], 3),
+                FLAG_SEQUENCE_OCTET
+            };
+            static FileWrite write(&(write_byte_mux_open[0]),
+                                   sizeof(write_byte_mux_open),
+                                   sizeof(write_byte_mux_open));
+            EXPECT_CALL(_fh, write(NotNull(), sizeof(write_byte_mux_open)))
+                        .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
+
+            mbed_equeue_stub::call_in_expect(T1_TIMER_VALUE, 1);
+
+            /* New request will set the operation pending, which will be started when this function returns. */
+            channel_open_err = _obj.channel_open();
+            EXPECT_EQ(NSAPI_ERROR_OK, channel_open_err);
+
+            break;
+        case 2:
+            EXPECT_TRUE(ev.data.fh != NULL);
+
+            break;
+        default:
+            EXPECT_TRUE(false);
+
+            break;
+    };
+}
+
+
+/*
+ * TC - Ensure proper behaviour when multiplexer control channel open fails with timeout and new channel open is issued
+ *      in the operation completion callback.
+ *
+ * Test sequence:
+ * - Multiplexer control channel open fails with timeout
+ * - Inside the channel open callback issue a new user channel open request
+ * - User channel establishment success
+ *
+ * Expected outcome:
+ * - As specified above
+ */
+TEST_F(TestMux, channel_open_inside_the_channel_open_callback_mux_open_timeout)
+{
+    InSequence dummy;
+
+    mbed::Mux3GPP obj;
+
+    events::EventQueue eq;
+    obj.eventqueue_attach(&eq);
+
+    MockFileHandle fh_mock;
+    SigIo          sig_io;
+    EXPECT_CALL(fh_mock, sigio(_)).Times(1).WillOnce(Invoke(&sig_io, &SigIo::sigio));
+    EXPECT_CALL(fh_mock, set_blocking(false)).WillOnce(Return(0));
+
+    obj.serial_attach(&fh_mock);
+
+    ChannelOpenInsideCallbackMuxOpenTimeoutTest callback(obj, fh_mock);
+    obj.callback_attach(mbed::Callback<void(mbed::MuxBase::event_context_t &)>(&callback,
+                        &ChannelOpenInsideCallbackMuxOpenTimeoutTest::channel_open_run),
+                        mbed::MuxBase::CHANNEL_TYPE_AT);
+
+    const uint8_t write_byte_mux_open[6] =
+    {
+        FLAG_SEQUENCE_OCTET,
+        ADDRESS_MUX_START_REQ_OCTET,
+        (FRAME_TYPE_SABM | PF_BIT),
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&write_byte_mux_open[1], 3),
+        FLAG_SEQUENCE_OCTET
+    };
+    FileWrite write(&(write_byte_mux_open[0]), sizeof(write_byte_mux_open), sizeof(write_byte_mux_open));
+    EXPECT_CALL(fh_mock, write(NotNull(), sizeof(write_byte_mux_open)))
+                .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
+
+    mbed_equeue_stub::call_in_expect(T1_TIMER_VALUE, 1);
+
+    /* Start test sequence. Test set mocks. */
+    const nsapi_error channel_open_err = obj.channel_open();
+    EXPECT_EQ(NSAPI_ERROR_OK, channel_open_err);
+
+    /* Generate maxium amount of timeout events, which trigger retransmission of open multiplexer control channel
+       request message. */
+
+    /* Begin frame re-transmit sequence.*/
+    uint8_t counter = RETRANSMIT_COUNT;
+    do {
+        FileWrite write(&(write_byte_mux_open[0]), sizeof(write_byte_mux_open), sizeof(write_byte_mux_open));
+        EXPECT_CALL(fh_mock, write(NotNull(), sizeof(write_byte_mux_open)))
+                    .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
+
+        mbed_equeue_stub::call_in_expect(T1_TIMER_VALUE, 1);
+
+        /* Trigger timer timeout. */
+        mbed_equeue_stub::timer_dispatch();
+
+        --counter;
+    } while (counter != 0);
+
+    /* Trigger timer to finish the re-transmission cycle and the whole open multiplexer control channel request. */
+
+    callback.callback_arm();
+    mbed_equeue_stub::timer_dispatch();
+
+    /* Verify correct callback count. */
+    EXPECT_EQ(1, callback.completion_count_get());
+
+    /* Read the mux open response frame. */
+    const uint8_t read_byte_mux_open[6] =
+    {
+        FLAG_SEQUENCE_OCTET,
+        ADDRESS_MUX_START_RESP_OCTET,
+        (FRAME_TYPE_UA | PF_BIT),
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&read_byte_mux_open[1], 3),
+        FLAG_SEQUENCE_OCTET
+    };
+    /* Reception of the mux open response frame starts the channel creation procedure. */
+    const uint32_t address                   = (3u) | (DLCI_ID_LOWER_BOUND << 2);
+    const uint8_t write_byte_channel_open[6] =
+    {
+        FLAG_SEQUENCE_OCTET,
+        address,
+        (FRAME_TYPE_SABM | PF_BIT),
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&write_byte_channel_open[1], 3),
+        FLAG_SEQUENCE_OCTET
+    };
+    peer_iniated_request_rx_full_frame_tx(READ_FLAG_SEQUENCE_OCTET, STRIP_FLAG_FIELD_NO,
+                                          &(read_byte_mux_open[0]), sizeof(read_byte_mux_open),
+                                          &(write_byte_channel_open[0]), sizeof(write_byte_channel_open),
+                                          CANCEL_TIMER_YES, START_TIMER_YES,
+                                          fh_mock, sig_io);
+
+    /* Receive user channel response.*/
+    const uint8_t read_byte_channel_open[5] =
+    {
+        write_byte_channel_open[1],
+        (FRAME_TYPE_UA | PF_BIT),
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&read_byte_channel_open[0], 3),
+        FLAG_SEQUENCE_OCTET
+    };
+    callback.callback_arm();
+    self_iniated_response_rx(&(read_byte_channel_open[0]),
+                             NULL,
+                             SKIP_FLAG_SEQUENCE_OCTET,
+                             STRIP_FLAG_FIELD_NO,
+                             ENQUEUE_DEFERRED_CALL_YES,
+                             STOP_RX_CYCLE_YES,
+                             fh_mock,
+                             sig_io);
+
+    /* Verify correct callback count. */
+    EXPECT_EQ(2, callback.completion_count_get());
+}

@@ -475,6 +475,10 @@ void peer_iniated_request_rx_full_frame_tx(FlagSequenceOctetReadType read_type,
     delete [] file_write;
 }
 
+typedef enum {
+    STOP_RX_CYCLE_NO,
+    STOP_RX_CYCLE_YES
+} StopRxCycleType;
 
 /* Read complete response frame from the peer
  */
@@ -483,6 +487,7 @@ void self_iniated_response_rx(const uint8_t            *rx_buf,
                               FlagSequenceOctetReadType read_type,
                               StripFlagFieldType        strip_flag_field_type,
                               EnqueueDeferredCallType   enqueue_deferred_call_type,
+                              StopRxCycleType           stop_rx_cycle_type,
                               MockFileHandle           &fh,
                               SigIo                    &sig_io)
 {
@@ -566,8 +571,10 @@ void self_iniated_response_rx(const uint8_t            *rx_buf,
         EXPECT_CALL(fh, write(NotNull(), (length_of_frame - 1u)))
                     .WillOnce(Invoke(&write_3, &FileWrite::write)).RetiresOnSaturation();
     } else {
-        /* Resume the Rx cycle and stop it. */
-        EXPECT_CALL(fh, read(NotNull(), FRAME_HEADER_READ_LEN)).WillOnce(Return(-EAGAIN)).RetiresOnSaturation();
+        if (stop_rx_cycle_type == STOP_RX_CYCLE_YES) {
+            /* Resume the Rx cycle and stop it. */
+            EXPECT_CALL(fh, read(NotNull(), FRAME_HEADER_READ_LEN)).WillOnce(Return(-EAGAIN)).RetiresOnSaturation();
+        }
     }
 
     mbed_equeue_stub::deferred_dispatch();
@@ -616,6 +623,7 @@ void single_complete_write_cycle(const uint8_t  *write_byte,
 void channel_open(uint8_t                 dlci,
                   MuxCallbackTest        &callback,
                   EnqueueDeferredCallType enqueue_deferred_call_type,
+                  StopRxCycleType         stop_rx_cycle_type,
                   mbed::Mux3GPP          &mux,
                   MockFileHandle         &fh,
                   SigIo                  &sig_io)
@@ -656,6 +664,7 @@ void channel_open(uint8_t                 dlci,
                              SKIP_FLAG_SEQUENCE_OCTET,
                              STRIP_FLAG_FIELD_NO,
                              enqueue_deferred_call_type,
+                             stop_rx_cycle_type,
                              fh,
                              sig_io);
 }
@@ -667,6 +676,7 @@ void mux_self_iniated_open(uint8_t                   tx_cycle_read_len,
                            StripFlagFieldType        strip_flag_field_type,
                            MuxCallbackTest          &callback,
                            uint8_t                   frame_type,
+                           StopRxCycleType           stop_rx_cycle_type,
                            mbed::Mux3GPP            &mux,
                            MockFileHandle           &fh,
                            SigIo                    &sig_io)
@@ -733,13 +743,14 @@ void mux_self_iniated_open(uint8_t                   tx_cycle_read_len,
     };
     callback.callback_arm();
     self_iniated_response_rx(&(read_byte_channel_open[0]), NULL, SKIP_FLAG_SEQUENCE_OCTET, STRIP_FLAG_FIELD_NO,
-                             ENQUEUE_DEFERRED_CALL_YES,
+                             ENQUEUE_DEFERRED_CALL_YES, stop_rx_cycle_type,
                              fh, sig_io);
 }
 
 
 void mux_self_iniated_open(MuxCallbackTest &callback,
                            uint8_t          frame_type,
+                           StopRxCycleType  stop_rx_cycle_type,
                            mbed::Mux3GPP   &mux,
                            MockFileHandle  &fh,
                            SigIo           &sig_io)
@@ -749,6 +760,7 @@ void mux_self_iniated_open(MuxCallbackTest &callback,
                           STRIP_FLAG_FIELD_NO,
                           callback,
                           frame_type,
+                          stop_rx_cycle_type,
                           mux,
                           fh,
                           sig_io);
@@ -1030,7 +1042,7 @@ TEST_F(TestMux, channel_open_mux_not_open)
     obj.callback_attach(mbed::Callback<void(mbed::MuxBase::event_context_t &)>(&callback,
                         &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
 
-    mux_self_iniated_open(callback, FRAME_TYPE_UA, obj, fh, sig_io);
+    mux_self_iniated_open(callback, FRAME_TYPE_UA, STOP_RX_CYCLE_YES, obj, fh, sig_io);
 
     /* Validate Filehandle generation. */
     EXPECT_TRUE(callback.is_callback_called());
@@ -1151,7 +1163,7 @@ TEST_F(TestMux, channel_open_mux_open_currently_running)
         FLAG_SEQUENCE_OCTET
     };
     self_iniated_response_rx(&(read_byte_channel_open[0]), NULL, SKIP_FLAG_SEQUENCE_OCTET, STRIP_FLAG_FIELD_NO,
-                             ENQUEUE_DEFERRED_CALL_YES,
+                             ENQUEUE_DEFERRED_CALL_YES, STOP_RX_CYCLE_YES,
                              fh, sig_io);
 
     /* Validate Filehandle generation. */
@@ -1331,6 +1343,7 @@ TEST_F(TestMux, mux_open_dm_tx_currently_running)
                              SKIP_FLAG_SEQUENCE_OCTET,
                              STRIP_FLAG_FIELD_NO,
                              ENQUEUE_DEFERRED_CALL_YES,
+                             STOP_RX_CYCLE_YES,
                              fh,
                              sig_io);
 
@@ -1342,6 +1355,7 @@ TEST_F(TestMux, mux_open_dm_tx_currently_running)
 
 void mux_self_iniated_open_rx_frame_sync_done(MuxCallbackTest &callback,
                                               uint8_t          frame_type,
+                                              StopRxCycleType  stop_rx_cycle_type,
                                               mbed::Mux3GPP   &mux,
                                               MockFileHandle  &fh,
                                               SigIo           &sig_io)
@@ -1351,6 +1365,7 @@ void mux_self_iniated_open_rx_frame_sync_done(MuxCallbackTest &callback,
                           STRIP_FLAG_FIELD_YES,
                           callback,
                           frame_type,
+                          stop_rx_cycle_type,
                           mux,
                           fh,
                           sig_io);
@@ -1433,6 +1448,7 @@ TEST_F(TestMux, channel_open_mux_open_rejected_by_peer)
                              READ_FLAG_SEQUENCE_OCTET,
                              STRIP_FLAG_FIELD_NO,
                              ENQUEUE_DEFERRED_CALL_YES,
+                             STOP_RX_CYCLE_YES,
                              fh,
                              sig_io);
 
@@ -1442,7 +1458,7 @@ TEST_F(TestMux, channel_open_mux_open_rejected_by_peer)
 
     /* Open multiplexer control channel and user channel. */
 
-    mux_self_iniated_open_rx_frame_sync_done(callback, FRAME_TYPE_UA, obj, fh, sig_io);
+    mux_self_iniated_open_rx_frame_sync_done(callback, FRAME_TYPE_UA, STOP_RX_CYCLE_YES, obj, fh, sig_io);
 
     /* Validate Filehandle generation. */
     EXPECT_TRUE(callback.is_callback_called());
@@ -1539,7 +1555,7 @@ TEST_F(TestMux, channel_open_mux_open_success_after_timeout)
 
     /* Open multiplexer control channel and user channel. */
 
-    mux_self_iniated_open(callback, FRAME_TYPE_UA, obj, fh, sig_io);
+    mux_self_iniated_open(callback, FRAME_TYPE_UA, STOP_RX_CYCLE_YES, obj, fh, sig_io);
 
     /* Validate Filehandle generation. */
     EXPECT_TRUE(callback.is_callback_called());
@@ -1556,7 +1572,7 @@ TEST_F(TestMux, channel_open_mux_open_success_after_timeout)
  * Expected outcome:
  * - No action taken by the implementation: received open multiplexer control channel request message silently discarded
  */
-TEST_F(TestMux,  mux_open_peer_initiated)
+TEST_F(TestMux, mux_open_peer_initiated)
 {
     InSequence dummy;
 
@@ -1622,7 +1638,7 @@ TEST_F(TestMux, mux_open_rx_disc_dlci_0)
 
     /* Open multiplexer control channel and user channel. */
 
-    mux_self_iniated_open(callback, FRAME_TYPE_UA, obj, fh, sig_io);
+    mux_self_iniated_open(callback, FRAME_TYPE_UA, STOP_RX_CYCLE_YES, obj, fh, sig_io);
 
     /* Validate Filehandle generation. */
     EXPECT_TRUE(callback.is_callback_called());
@@ -1676,7 +1692,7 @@ TEST_F(TestMux, mux_open_rx_disc_dlci_in_use)
 
     /* Open multiplexer control channel and user channel. */
 
-    mux_self_iniated_open(callback, FRAME_TYPE_UA, obj, fh, sig_io);
+    mux_self_iniated_open(callback, FRAME_TYPE_UA, STOP_RX_CYCLE_YES, obj, fh, sig_io);
 
     /* Validate Filehandle generation. */
     EXPECT_TRUE(callback.is_callback_called());
@@ -1799,6 +1815,7 @@ TEST_F(TestMux, channel_open_mux_open_tx_in_call_context)
                              SKIP_FLAG_SEQUENCE_OCTET,
                              STRIP_FLAG_FIELD_NO,
                              ENQUEUE_DEFERRED_CALL_YES,
+                             STOP_RX_CYCLE_YES,
                              fh,
                              sig_io);
 
@@ -1845,7 +1862,7 @@ TEST_F(TestMux, channel_open_success_after_timeout)
 
     /* Establish user channel. */
 
-    mux_self_iniated_open(callback, FRAME_TYPE_UA, obj, fh, sig_io);
+    mux_self_iniated_open(callback, FRAME_TYPE_UA, STOP_RX_CYCLE_YES, obj, fh, sig_io);
 
     /* Validate Filehandle generation. */
     EXPECT_TRUE(callback.is_callback_called());
@@ -1909,7 +1926,7 @@ TEST_F(TestMux, channel_open_success_after_timeout)
     EXPECT_TRUE(callback.is_callback_called());
     EXPECT_EQ(NULL, callback.file_handle_get());
 
-    channel_open(2, callback, ENQUEUE_DEFERRED_CALL_YES, obj, fh, sig_io);
+    channel_open(2, callback, ENQUEUE_DEFERRED_CALL_YES, STOP_RX_CYCLE_YES, obj, fh, sig_io);
 
     /* Validate Filehandle generation. */
     EXPECT_TRUE(callback.is_callback_called());
@@ -1949,7 +1966,7 @@ TEST_F(TestMux, channel_open_all_channel_ids_used)
 
     /* Establish a user channel. */
 
-    mux_self_iniated_open(callback, FRAME_TYPE_UA, obj, fh, sig_io);
+    mux_self_iniated_open(callback, FRAME_TYPE_UA, STOP_RX_CYCLE_YES, obj, fh, sig_io);
 
     /* Validate Filehandle generation. */
     EXPECT_TRUE(callback.is_callback_called());
@@ -1959,7 +1976,7 @@ TEST_F(TestMux, channel_open_all_channel_ids_used)
     uint8_t i       = MAX_DLCI_COUNT - 1u;
     uint8_t dlci_id = 2u;
     do {
-        channel_open(dlci_id, callback, ENQUEUE_DEFERRED_CALL_YES, obj, fh, sig_io);
+        channel_open(dlci_id, callback, ENQUEUE_DEFERRED_CALL_YES, STOP_RX_CYCLE_YES, obj, fh, sig_io);
 
         /* Validate Filehandle generation. */
         EXPECT_TRUE(callback.is_callback_called());
@@ -2025,7 +2042,7 @@ TEST_F(TestMux, channel_open_all_channel_ids_used_ensure_uniqueue)
 
     /* Establish a user channel. */
 
-    mux_self_iniated_open(callback, FRAME_TYPE_UA, obj, fh_mock, sig_io);
+    mux_self_iniated_open(callback, FRAME_TYPE_UA, STOP_RX_CYCLE_YES, obj, fh_mock, sig_io);
 
     /* Validate Filehandle generation. */
     EXPECT_TRUE(callback.is_callback_called());
@@ -2042,7 +2059,7 @@ TEST_F(TestMux, channel_open_all_channel_ids_used_ensure_uniqueue)
     uint8_t i       = MAX_DLCI_COUNT - 1u;
     uint8_t dlci_id = 2u;
     do {
-        channel_open(dlci_id, callback, ENQUEUE_DEFERRED_CALL_YES, obj, fh_mock, sig_io);
+        channel_open(dlci_id, callback, ENQUEUE_DEFERRED_CALL_YES, STOP_RX_CYCLE_YES, obj, fh_mock, sig_io);
 
         /* Validate Filehandle generation. */
         EXPECT_TRUE(callback.is_callback_called());
@@ -2102,7 +2119,7 @@ TEST_F(TestMux, channel_open_rejected_by_peer)
     /* Establish multiplexer control channel. Peer rejects user channel request message with appropriate response
        message. */
 
-    mux_self_iniated_open(callback, FRAME_TYPE_DM, obj, fh_mock, sig_io);
+    mux_self_iniated_open(callback, FRAME_TYPE_DM, STOP_RX_CYCLE_YES, obj, fh_mock, sig_io);
 
     /* Validate Filehandle generation. */
     EXPECT_TRUE(callback.is_callback_called());
@@ -2110,7 +2127,7 @@ TEST_F(TestMux, channel_open_rejected_by_peer)
 
     /* Establish user channel. */
 
-    channel_open(1, callback, ENQUEUE_DEFERRED_CALL_YES, obj, fh_mock, sig_io);
+    channel_open(1, callback, ENQUEUE_DEFERRED_CALL_YES, STOP_RX_CYCLE_YES, obj, fh_mock, sig_io);
 
     /* Validate Filehandle generation. */
     EXPECT_TRUE(callback.is_callback_called());
@@ -2151,7 +2168,7 @@ TEST_F(TestMux, dlci_establish_peer_initiated)
 
     /* Establish a user channel. */
 
-    mux_self_iniated_open(callback, FRAME_TYPE_UA, obj, fh_mock, sig_io);
+    mux_self_iniated_open(callback, FRAME_TYPE_UA, STOP_RX_CYCLE_YES, obj, fh_mock, sig_io);
 
     /* Validate Filehandle generation. */
     EXPECT_TRUE(callback.is_callback_called());
@@ -2209,7 +2226,7 @@ TEST_F(TestMux, channel_open_dm_tx_currently_running)
 
     /* Establish a user channel. */
 
-    mux_self_iniated_open(callback, FRAME_TYPE_UA, obj, fh_mock, sig_io);
+    mux_self_iniated_open(callback, FRAME_TYPE_UA, STOP_RX_CYCLE_YES, obj, fh_mock, sig_io);
 
     /* Validate Filehandle generation. */
     EXPECT_TRUE(callback.is_callback_called());
@@ -2295,6 +2312,7 @@ TEST_F(TestMux, channel_open_dm_tx_currently_running)
                              SKIP_FLAG_SEQUENCE_OCTET,
                              STRIP_FLAG_FIELD_NO,
                              ENQUEUE_DEFERRED_CALL_YES,
+                             STOP_RX_CYCLE_YES,
                              fh_mock,
                              sig_io);
 
@@ -2343,7 +2361,7 @@ TEST_F(TestMux, user_tx_0_length_user_payload)
 
     /* Establish a user channel. */
 
-    mux_self_iniated_open(callback, FRAME_TYPE_UA, obj, fh_mock, sig_io);
+    mux_self_iniated_open(callback, FRAME_TYPE_UA, STOP_RX_CYCLE_YES, obj, fh_mock, sig_io);
 
     /* Validate Filehandle generation. */
     EXPECT_TRUE(callback.is_callback_called());
@@ -2398,7 +2416,7 @@ TEST_F(TestMux, user_tx_size_lower_bound)
 
     /* Establish a user channel. */
 
-    mux_self_iniated_open(callback, FRAME_TYPE_UA, obj, fh_mock, sig_io);
+    mux_self_iniated_open(callback, FRAME_TYPE_UA, STOP_RX_CYCLE_YES, obj, fh_mock, sig_io);
 
     /* Validate Filehandle generation. */
     EXPECT_TRUE(callback.is_callback_called());
@@ -2476,7 +2494,7 @@ TEST_F(TestMux, user_tx_size_upper_bound_and_oob)
 
     /* Establish a user channel. */
 
-    mux_self_iniated_open(callback, FRAME_TYPE_UA, obj, fh_mock, sig_io);
+    mux_self_iniated_open(callback, FRAME_TYPE_UA, STOP_RX_CYCLE_YES, obj, fh_mock, sig_io);
 
     /* Validate Filehandle generation. */
     EXPECT_TRUE(callback.is_callback_called());
@@ -2557,7 +2575,7 @@ TEST_F(TestMux, user_tx_2_full_frame_writes)
 
     /* Establish a user channel. */
 
-    mux_self_iniated_open(callback, FRAME_TYPE_UA, obj, fh_mock, sig_io);
+    mux_self_iniated_open(callback, FRAME_TYPE_UA, STOP_RX_CYCLE_YES, obj, fh_mock, sig_io);
 
     /* Validate Filehandle generation. */
     EXPECT_TRUE(callback.is_callback_called());
@@ -2651,7 +2669,7 @@ TEST_F(TestMux, user_tx_dlci_establish_during_user_tx)
 
     /* Establish a user channel. */
 
-    mux_self_iniated_open(callback, FRAME_TYPE_UA, obj, fh_mock, sig_io);
+    mux_self_iniated_open(callback, FRAME_TYPE_UA, STOP_RX_CYCLE_YES, obj, fh_mock, sig_io);
 
     /* Validate Filehandle generation. */
     EXPECT_TRUE(callback.is_callback_called());
@@ -2717,6 +2735,7 @@ TEST_F(TestMux, user_tx_dlci_establish_during_user_tx)
                              SKIP_FLAG_SEQUENCE_OCTET,
                              STRIP_FLAG_FIELD_NO,
                              ENQUEUE_DEFERRED_CALL_YES,
+                             STOP_RX_CYCLE_YES,
                              fh_mock,
                              sig_io);
 
@@ -2807,7 +2826,7 @@ TEST_F(TestMux, tx_callback_dispatch_triggered_tx_within_callback)
 
     /* Establish a user channel. */
 
-    mux_self_iniated_open(callback, FRAME_TYPE_UA, obj, m_fh_mock, sig_io);
+    mux_self_iniated_open(callback, FRAME_TYPE_UA, STOP_RX_CYCLE_YES, obj, m_fh_mock, sig_io);
 
     /* Validate Filehandle generation. */
     EXPECT_TRUE(callback.is_callback_called());
@@ -2901,7 +2920,7 @@ TEST_F(TestMux, tx_callback_dispatch_set_pending_multiple_times_for_same_dlci_on
 
     /* Establish a user channel. */
 
-    mux_self_iniated_open(callback, FRAME_TYPE_UA, obj, fh_mock, sig_io);
+    mux_self_iniated_open(callback, FRAME_TYPE_UA, STOP_RX_CYCLE_YES, obj, fh_mock, sig_io);
 
     /* Validate Filehandle generation. */
     EXPECT_TRUE(callback.is_callback_called());
@@ -2995,7 +3014,7 @@ TEST_F(TestMux, tx_callback_dispatch_set_pending_for_all_dlcis)
 
     /* Establish a user channel. */
 
-    mux_self_iniated_open(callback, FRAME_TYPE_UA, obj, fh_mock, sig_io);
+    mux_self_iniated_open(callback, FRAME_TYPE_UA, STOP_RX_CYCLE_YES, obj, fh_mock, sig_io);
 
     /* Validate Filehandle generation. */
     EXPECT_TRUE(callback.is_callback_called());
@@ -3007,7 +3026,7 @@ TEST_F(TestMux, tx_callback_dispatch_set_pending_for_all_dlcis)
     /* Create max amount of DLCIs and collect the handles */
     uint8_t dlci_id = DLCI_ID_LOWER_BOUND + 1u;
     for (uint8_t i = 1u; i!= MAX_DLCI_COUNT; ++i) {
-        channel_open(dlci_id, callback, ENQUEUE_DEFERRED_CALL_YES, obj, fh_mock, sig_io);
+        channel_open(dlci_id, callback, ENQUEUE_DEFERRED_CALL_YES, STOP_RX_CYCLE_YES, obj, fh_mock, sig_io);
 
         /* Validate Filehandle generation. */
         EXPECT_TRUE(callback.is_callback_called());
@@ -3133,7 +3152,7 @@ TEST_F(TestMux, tx_callback_dispatch_rollover_tx_pending_bitmask)
 
     /* Establish a user channel. */
 
-    mux_self_iniated_open(callback, FRAME_TYPE_UA, obj, m_fh_mock, sig_io);
+    mux_self_iniated_open(callback, FRAME_TYPE_UA, STOP_RX_CYCLE_YES, obj, m_fh_mock, sig_io);
 
     /* Validate Filehandle generation. */
     EXPECT_TRUE(callback.is_callback_called());
@@ -3145,7 +3164,7 @@ TEST_F(TestMux, tx_callback_dispatch_rollover_tx_pending_bitmask)
     /* Create max amount of DLCIs and collect the handles */
     uint8_t dlci_id = DLCI_ID_LOWER_BOUND + 1u;
     for (uint8_t i = 1u; i!= MAX_DLCI_COUNT; ++i) {
-        channel_open(dlci_id, callback, ENQUEUE_DEFERRED_CALL_YES, obj, m_fh_mock, sig_io);
+        channel_open(dlci_id, callback, ENQUEUE_DEFERRED_CALL_YES, STOP_RX_CYCLE_YES, obj, m_fh_mock, sig_io);
 
         /* Validate Filehandle generation. */
         EXPECT_TRUE(callback.is_callback_called());
@@ -3284,7 +3303,7 @@ TEST_F(TestMux, tx_callback_dispatch_tx_to_different_dlci_within_current_context
 
     /* Establish a user channel. */
 
-    mux_self_iniated_open(callback, FRAME_TYPE_UA, obj, m_fh_mock, sig_io);
+    mux_self_iniated_open(callback, FRAME_TYPE_UA, STOP_RX_CYCLE_YES, obj, m_fh_mock, sig_io);
 
     /* Validate Filehandle generation. */
     EXPECT_TRUE(callback.is_callback_called());
@@ -3296,7 +3315,7 @@ TEST_F(TestMux, tx_callback_dispatch_tx_to_different_dlci_within_current_context
     /* Create 2nd channel and collect the handle. */
 
     uint8_t dlci_id = DLCI_ID_LOWER_BOUND + 1u;
-    channel_open(dlci_id, callback, ENQUEUE_DEFERRED_CALL_YES, obj, m_fh_mock, sig_io);
+    channel_open(dlci_id, callback, ENQUEUE_DEFERRED_CALL_YES, STOP_RX_CYCLE_YES, obj, m_fh_mock, sig_io);
 
     /* Validate Filehandle generation. */
     EXPECT_TRUE(callback.is_callback_called());
@@ -3432,7 +3451,7 @@ TEST_F(TestMux, tx_callback_dispatch_tx_to_different_dlci_not_within_current_con
 
     /* Establish a user channel. */
 
-    mux_self_iniated_open(callback, FRAME_TYPE_UA, obj, m_fh_mock, sig_io);
+    mux_self_iniated_open(callback, FRAME_TYPE_UA, STOP_RX_CYCLE_YES, obj, m_fh_mock, sig_io);
 
     /* Validate Filehandle generation. */
     EXPECT_TRUE(callback.is_callback_called());
@@ -3444,7 +3463,7 @@ TEST_F(TestMux, tx_callback_dispatch_tx_to_different_dlci_not_within_current_con
     /* Create 2nd channel and collect the handle. */
 
     uint8_t dlci_id = DLCI_ID_LOWER_BOUND + 1u;
-    channel_open(dlci_id, callback, ENQUEUE_DEFERRED_CALL_YES, obj, m_fh_mock, sig_io);
+    channel_open(dlci_id, callback, ENQUEUE_DEFERRED_CALL_YES, STOP_RX_CYCLE_YES, obj, m_fh_mock, sig_io);
 
     /* Validate Filehandle generation. */
     EXPECT_TRUE(callback.is_callback_called());
@@ -3600,7 +3619,7 @@ TEST_F(TestMux, user_rx_0_length_user_payload)
 
     /* Establish a user channel. */
 
-    mux_self_iniated_open(callback, FRAME_TYPE_UA, obj, fh_mock, sig_io);
+    mux_self_iniated_open(callback, FRAME_TYPE_UA, STOP_RX_CYCLE_YES, obj, fh_mock, sig_io);
 
     /* Validate Filehandle generation. */
     EXPECT_TRUE(callback.is_callback_called());
@@ -3694,7 +3713,7 @@ TEST_F(TestMux, user_rx_single_read)
 
     /* Establish a user channel. */
 
-    mux_self_iniated_open(callback, FRAME_TYPE_UA, obj, fh_mock, sig_io);
+    mux_self_iniated_open(callback, FRAME_TYPE_UA, STOP_RX_CYCLE_YES, obj, fh_mock, sig_io);
 
     /* Validate Filehandle generation. */
     EXPECT_TRUE(callback.is_callback_called());
@@ -3769,7 +3788,7 @@ TEST_F(TestMux, user_rx_single_read_no_data_available)
 
     /* Establish a user channel. */
 
-    mux_self_iniated_open(callback, FRAME_TYPE_UA, obj, fh_mock, sig_io);
+    mux_self_iniated_open(callback, FRAME_TYPE_UA, STOP_RX_CYCLE_YES, obj, fh_mock, sig_io);
 
     /* Validate Filehandle generation. */
     EXPECT_TRUE(callback.is_callback_called());
@@ -3832,7 +3851,7 @@ TEST_F(TestMux, user_rx_rx_suspend_rx_resume_cycle)
 
     /* Establish a user channel. */
 
-    mux_self_iniated_open(callback, FRAME_TYPE_UA, obj, fh_mock, sig_io);
+    mux_self_iniated_open(callback, FRAME_TYPE_UA, STOP_RX_CYCLE_YES, obj, fh_mock, sig_io);
 
     /* Validate Filehandle generation. */
     EXPECT_TRUE(callback.is_callback_called());
@@ -3959,7 +3978,7 @@ TEST_F(TestMux, user_rx_read_1_byte_per_run_context)
 
     /* Establish a user channel. */
 
-    mux_self_iniated_open(callback, FRAME_TYPE_UA, obj, fh_mock, sig_io);
+    mux_self_iniated_open(callback, FRAME_TYPE_UA, STOP_RX_CYCLE_YES, obj, fh_mock, sig_io);
 
     /* Validate Filehandle generation. */
     EXPECT_TRUE(callback.is_callback_called());
@@ -4036,7 +4055,7 @@ TEST_F(TestMux, user_rx_read_max_size_user_payload_in_1_read_call)
 
     /* Establish a user channel. */
 
-    mux_self_iniated_open(callback, FRAME_TYPE_UA, obj, fh_mock, sig_io);
+    mux_self_iniated_open(callback, FRAME_TYPE_UA, STOP_RX_CYCLE_YES, obj, fh_mock, sig_io);
 
     /* Validate Filehandle generation. */
     EXPECT_TRUE(callback.is_callback_called());
@@ -4123,7 +4142,7 @@ TEST_F(TestMux, user_rx_read_1_byte_per_read_call_max_size_user_payload_availabl
 
     /* Establish a user channel. */
 
-    mux_self_iniated_open(callback, FRAME_TYPE_UA, obj, fh_mock, sig_io);
+    mux_self_iniated_open(callback, FRAME_TYPE_UA, STOP_RX_CYCLE_YES, obj, fh_mock, sig_io);
 
     /* Validate Filehandle generation. */
     EXPECT_TRUE(callback.is_callback_called());
@@ -4223,7 +4242,7 @@ TEST_F(TestMux, user_rx_dlci_not_established)
 
     /* Establish a user channel. */
 
-    mux_self_iniated_open(callback, FRAME_TYPE_UA, obj, fh_mock, sig_io);
+    mux_self_iniated_open(callback, FRAME_TYPE_UA, STOP_RX_CYCLE_YES, obj, fh_mock, sig_io);
 
     /* Validate Filehandle generation. */
     EXPECT_TRUE(callback.is_callback_called());
@@ -4285,7 +4304,7 @@ TEST_F(TestMux, user_rx_dlci_not_established)
         EXPECT_EQ(-EAGAIN, read_ret);
 
         /* Establish a DLCI. */
-        channel_open(dlci_id, callback, ENQUEUE_DEFERRED_CALL_NO, obj, fh_mock, sig_io);
+        channel_open(dlci_id, callback, ENQUEUE_DEFERRED_CALL_NO, STOP_RX_CYCLE_YES, obj, fh_mock, sig_io);
 
         /* Validate Filehandle generation. */
         EXPECT_TRUE(callback.is_callback_called());
@@ -4400,6 +4419,7 @@ TEST_F(TestMux, user_rx_invalidate_dlci_id_used)
                              READ_FLAG_SEQUENCE_OCTET,
                              STRIP_FLAG_FIELD_NO,
                              ENQUEUE_DEFERRED_CALL_YES,
+                             STOP_RX_CYCLE_YES,
                              fh_mock,
                              sig_io);
 
@@ -4444,6 +4464,7 @@ TEST_F(TestMux, user_rx_invalidate_dlci_id_used)
                              SKIP_FLAG_SEQUENCE_OCTET,
                              STRIP_FLAG_FIELD_NO,
                              ENQUEUE_DEFERRED_CALL_YES,
+                             STOP_RX_CYCLE_YES,
                              fh_mock,
                              sig_io);
 
@@ -4545,7 +4566,7 @@ TEST_F(TestMux, user_rx_invalid_fcs)
 
     /* Establish a user channel. */
 
-    mux_self_iniated_open(callback, FRAME_TYPE_UA, obj, fh_mock, sig_io);
+    mux_self_iniated_open(callback, FRAME_TYPE_UA, STOP_RX_CYCLE_YES, obj, fh_mock, sig_io);
 
     /* Validate Filehandle generation. */
     EXPECT_TRUE(callback.is_callback_called());
@@ -4654,7 +4675,7 @@ TEST_F(TestMux, rx_frame_type_not_supported)
 
     /* Establish a user channel. */
 
-    mux_self_iniated_open(callback, FRAME_TYPE_UA, obj, fh_mock, sig_io);
+    mux_self_iniated_open(callback, FRAME_TYPE_UA, STOP_RX_CYCLE_YES, obj, fh_mock, sig_io);
 
     /* Validate Filehandle generation. */
     EXPECT_TRUE(callback.is_callback_called());
@@ -4753,7 +4774,7 @@ TEST_F(TestMux, rx_frame_type_ua_when_no_sabm_send)
 
     /* Establish a user channel. */
 
-    mux_self_iniated_open(callback, FRAME_TYPE_UA, obj, fh_mock, sig_io);
+    mux_self_iniated_open(callback, FRAME_TYPE_UA, STOP_RX_CYCLE_YES, obj, fh_mock, sig_io);
 
     /* Validate Filehandle generation. */
     EXPECT_TRUE(callback.is_callback_called());
@@ -4784,7 +4805,7 @@ TEST_F(TestMux, rx_frame_type_ua_when_no_sabm_send)
 
     /* Establish 2nd DLCI. */
 
-    channel_open((dlci_id + 1u), callback, ENQUEUE_DEFERRED_CALL_YES, obj, fh_mock, sig_io);
+    channel_open((dlci_id + 1u), callback, ENQUEUE_DEFERRED_CALL_YES, STOP_RX_CYCLE_YES, obj, fh_mock, sig_io);
 
     /* Validate Filehandle generation. */
     EXPECT_TRUE(callback.is_callback_called());
@@ -4828,7 +4849,7 @@ TEST_F(TestMux, rx_frame_type_dm_when_no_sabm_send)
 
     /* Establish a user channel. */
 
-    mux_self_iniated_open(callback, FRAME_TYPE_UA, obj, fh_mock, sig_io);
+    mux_self_iniated_open(callback, FRAME_TYPE_UA, STOP_RX_CYCLE_YES, obj, fh_mock, sig_io);
 
     /* Validate Filehandle generation. */
     EXPECT_TRUE(callback.is_callback_called());
@@ -4859,7 +4880,7 @@ TEST_F(TestMux, rx_frame_type_dm_when_no_sabm_send)
 
     /* Establish 2nd DLCI. */
 
-    channel_open((dlci_id + 1u), callback, ENQUEUE_DEFERRED_CALL_YES, obj, fh_mock, sig_io);
+    channel_open((dlci_id + 1u), callback, ENQUEUE_DEFERRED_CALL_YES, STOP_RX_CYCLE_YES, obj, fh_mock, sig_io);
 
     /* Validate Filehandle generation. */
     EXPECT_TRUE(callback.is_callback_called());
@@ -4991,6 +5012,7 @@ TEST_F(TestMux, rx_frame_type_ua_invalid_cr_and_pf_bit)
                              SKIP_FLAG_SEQUENCE_OCTET,
                              STRIP_FLAG_FIELD_NO,
                              ENQUEUE_DEFERRED_CALL_YES,
+                             STOP_RX_CYCLE_YES,
                              fh_mock,
                              sig_io);
 
@@ -5049,7 +5071,7 @@ TEST_F(TestMux, rx_frame_type_uih_invalid_cr_and_pf_bit)
 
     /* Establish a user channel. */
 
-    mux_self_iniated_open(callback, FRAME_TYPE_UA, obj, fh_mock, sig_io);
+    mux_self_iniated_open(callback, FRAME_TYPE_UA, STOP_RX_CYCLE_YES, obj, fh_mock, sig_io);
 
     /* Validate Filehandle generation. */
     EXPECT_TRUE(callback.is_callback_called());
@@ -5246,6 +5268,7 @@ TEST_F(TestMux, rx_frame_type_dm_invalid_cr_and_pf_bit)
                              SKIP_FLAG_SEQUENCE_OCTET,
                              STRIP_FLAG_FIELD_NO,
                              ENQUEUE_DEFERRED_CALL_YES,
+                             STOP_RX_CYCLE_YES,
                              fh_mock,
                              sig_io);
 
@@ -5253,7 +5276,7 @@ TEST_F(TestMux, rx_frame_type_dm_invalid_cr_and_pf_bit)
     m_file_handle[0] = callback.file_handle_get();
     EXPECT_EQ(NULL, m_file_handle[0]);
 
-    channel_open(DLCI_ID_LOWER_BOUND, callback, ENQUEUE_DEFERRED_CALL_YES, obj, fh_mock, sig_io);
+    channel_open(DLCI_ID_LOWER_BOUND, callback, ENQUEUE_DEFERRED_CALL_YES, STOP_RX_CYCLE_YES, obj, fh_mock, sig_io);
 
     EXPECT_TRUE(callback.is_callback_called());
     m_file_handle[0] = callback.file_handle_get();
@@ -5295,7 +5318,7 @@ TEST_F(TestMux, rx_frame_type_disc_invalid_cr_and_pf_bit)
 
     /* Establish a user channel. */
 
-    mux_self_iniated_open(callback, FRAME_TYPE_UA, obj, fh_mock, sig_io);
+    mux_self_iniated_open(callback, FRAME_TYPE_UA, STOP_RX_CYCLE_YES, obj, fh_mock, sig_io);
 
     /* Validate Filehandle generation. */
     EXPECT_TRUE(callback.is_callback_called());
@@ -5400,7 +5423,7 @@ TEST_F(TestMux, rx_frame_type_disc_while_tx_in_progress)
 
     /* Establish a user channel. */
 
-    mux_self_iniated_open(callback, FRAME_TYPE_UA, obj, fh_mock, sig_io);
+    mux_self_iniated_open(callback, FRAME_TYPE_UA, STOP_RX_CYCLE_YES, obj, fh_mock, sig_io);
 
     /* Validate Filehandle generation. */
     EXPECT_TRUE(callback.is_callback_called());
@@ -5561,7 +5584,7 @@ TEST_F(TestMux, rx_frame_type_ua_dlci_id_mismatch)
         FLAG_SEQUENCE_OCTET
     };
     self_iniated_response_rx(&(read_byte_channel_open[0]), NULL, SKIP_FLAG_SEQUENCE_OCTET, STRIP_FLAG_FIELD_NO,
-                             ENQUEUE_DEFERRED_CALL_YES, fh_mock, sig_io);
+                             ENQUEUE_DEFERRED_CALL_YES, STOP_RX_CYCLE_YES, fh_mock, sig_io);
 
     /* Validate Filehandle generation. */
     EXPECT_TRUE(callback.is_callback_called());
@@ -5650,10 +5673,123 @@ TEST_F(TestMux, rx_frame_type_dm_dlci_id_mismatch)
     };
     callback.callback_arm();
     self_iniated_response_rx(&(read_byte[0]), NULL, SKIP_FLAG_SEQUENCE_OCTET, STRIP_FLAG_FIELD_NO,
-                             ENQUEUE_DEFERRED_CALL_YES, fh_mock, sig_io);
+                             ENQUEUE_DEFERRED_CALL_YES, STOP_RX_CYCLE_YES, fh_mock, sig_io);
 
     /* Validate Filehandle generation. */
     EXPECT_TRUE(callback.is_callback_called());
     mbed::FileHandle *fh = callback.file_handle_get();
     EXPECT_EQ(NULL, fh);
+}
+
+
+class ChannelOpenInsideCallbackTest : public MuxCallbackTest {
+
+public:
+
+    ChannelOpenInsideCallbackTest(mbed::Mux3GPP  &obj, MockFileHandle &fh) :
+                                  _completion_count(0), _fh(fh), _obj(obj) {};
+
+    virtual void channel_open_run(mbed::MuxBase::event_context_t &ev);
+    uint8_t completion_count_get() {return _completion_count;}
+
+private:
+
+    uint8_t         _completion_count;
+    MockFileHandle &_fh;
+    mbed::Mux3GPP  &_obj;
+};
+
+
+void ChannelOpenInsideCallbackTest::channel_open_run(mbed::MuxBase::event_context_t &ev)
+{
+    EXPECT_TRUE(_is_armed);
+    EXPECT_TRUE(ev.data.fh != NULL);
+    EXPECT_EQ(mbed::MuxBase::EVENT_TYPE_OPEN, ev.event);
+
+    _is_armed = false;
+    ++_completion_count;
+
+    if (_completion_count == 1u) {
+        /* Program completion function to start new user channel establishment procedure upon return.*/
+
+        const uint32_t address                          = 3u | ((DLCI_ID_LOWER_BOUND + 1u) << 2);
+        // @note: static needed as needs to be valid after function returns.
+        static const uint8_t write_byte_channel_open[6] =
+        {
+            FLAG_SEQUENCE_OCTET,
+            address,
+            (FRAME_TYPE_SABM | PF_BIT),
+            LENGTH_INDICATOR_OCTET,
+            fcs_calculate(&write_byte_channel_open[1], 3),
+            FLAG_SEQUENCE_OCTET
+        };
+        static FileWrite write(&(write_byte_channel_open[0]),
+                               sizeof(write_byte_channel_open),
+                               sizeof(write_byte_channel_open));
+        EXPECT_CALL(_fh, write(NotNull(), sizeof(write_byte_channel_open)))
+                    .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
+
+        mbed_equeue_stub::call_in_expect(T1_TIMER_VALUE, 1);
+
+        /* Resume the Rx cycle and stop it. */
+        EXPECT_CALL(_fh, read(NotNull(), FRAME_HEADER_READ_LEN)).WillOnce(Return(-EAGAIN)).RetiresOnSaturation();
+
+        /* New request will set the operation pending, which will be started when this function returns. */
+        const nsapi_error channel_open_err = _obj.channel_open();
+        EXPECT_EQ(NSAPI_ERROR_OK, channel_open_err);
+    }
+}
+
+/*
+ * TC - Ensure proper behaviour when user channel is opened and new user channel open is issued in the operation
+ *      completion callback callback.
+ *
+ * Test sequence:
+ * - Establish a user channel
+ * - Inside the channel open callback issue a new user channel open request
+ * - Receive a open user channel response message
+ *
+ * Expected outcome:
+ * - As specified above
+ */
+TEST_F(TestMux, channel_open_inside_the_channel_open_callback)
+{
+    InSequence dummy;
+
+    mbed::Mux3GPP obj;
+
+    events::EventQueue eq;
+    obj.eventqueue_attach(&eq);
+
+    MockFileHandle fh_mock;
+    SigIo          sig_io;
+    EXPECT_CALL(fh_mock, sigio(_)).Times(1).WillOnce(Invoke(&sig_io, &SigIo::sigio));
+    EXPECT_CALL(fh_mock, set_blocking(false)).WillOnce(Return(0));
+
+    obj.serial_attach(&fh_mock);
+
+    ChannelOpenInsideCallbackTest callback(obj, fh_mock);
+    obj.callback_attach(mbed::Callback<void(mbed::MuxBase::event_context_t &)>(&callback,
+                        &ChannelOpenInsideCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
+
+    /* Establish a user channel. */
+
+    mux_self_iniated_open(callback, FRAME_TYPE_UA, STOP_RX_CYCLE_NO, obj, fh_mock, sig_io);
+
+    /* Read the channel open response frame. */
+    const uint32_t address                  = 3u | ((DLCI_ID_LOWER_BOUND + 1u) << 2);
+    const uint8_t read_byte_channel_open[5] =
+    {
+        address,
+        (FRAME_TYPE_UA | PF_BIT),
+        LENGTH_INDICATOR_OCTET,
+        fcs_calculate(&read_byte_channel_open[0], 3),
+        FLAG_SEQUENCE_OCTET
+    };
+    callback.callback_arm();
+    self_iniated_response_rx(&(read_byte_channel_open[0]), NULL, SKIP_FLAG_SEQUENCE_OCTET, STRIP_FLAG_FIELD_NO,
+                             ENQUEUE_DEFERRED_CALL_YES, STOP_RX_CYCLE_YES, fh_mock, sig_io);
+
+    /* Verify correct callback count. */
+    EXPECT_EQ(2, callback.completion_count_get());
 }

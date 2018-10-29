@@ -88,21 +88,18 @@ protected:
 #define TX_BUFFER_SIZE               31u                         /* Size of the TX buffer in number of bytes. */
 #define RX_BUFFER_SIZE               TX_BUFFER_SIZE              /* Size of the RX buffer in number of bytes. */
 
-typedef enum
-{
+typedef enum {
     READ_FLAG_SEQUENCE_OCTET = 0,
     SKIP_FLAG_SEQUENCE_OCTET
 } FlagSequenceOctetReadType;
 
 
-typedef enum
-{
+typedef enum {
     STRIP_FLAG_FIELD_NO = 0,
     STRIP_FLAG_FIELD_YES
 } StripFlagFieldType;
 
-typedef enum
-{
+typedef enum {
     ENQUEUE_DEFERRED_CALL_NO = 0,
     ENQUEUE_DEFERRED_CALL_YES
 } EnqueueDeferredCallType;
@@ -152,14 +149,23 @@ public:
 
     virtual ~MockFileHandle() {};
 
-    MOCK_METHOD2(write, ssize_t(const void* buffer, size_t size));
+    MOCK_METHOD2(write, ssize_t(const void *buffer, size_t size));
     MOCK_METHOD2(read, ssize_t(void *buffer, size_t size));
     MOCK_METHOD1(set_blocking, int(bool blocking));
     MOCK_METHOD1(sigio, void(mbed::Callback<void()> func));
 
-    virtual short poll(short events) const {return 0;}
-    virtual off_t seek(off_t offset, int whence/* = SEEK_SET*/) {return 0;}
-    virtual int close() {return 0;}
+    virtual short poll(short events) const
+    {
+        return 0;
+    }
+    virtual off_t seek(off_t offset, int whence/* = SEEK_SET*/)
+    {
+        return 0;
+    }
+    virtual int close()
+    {
+        return 0;
+    }
 };
 
 
@@ -227,8 +233,8 @@ public:
 
     FileWrite() : _buffer(NULL), _size(0), _return(0) {};
     FileWrite(const void *buffer, size_t size, ssize_t return_value) : _buffer(buffer),
-                                                                       _size(size),
-                                                                       _return(return_value) {};
+        _size(size),
+        _return(return_value) {};
 
     void set(const void *buffer, size_t size, ssize_t return_value)
     {
@@ -258,8 +264,8 @@ public:
 
     FileRead() : _buffer(NULL), _size(0), _return(0) {};
     FileRead(const void *buffer, size_t size, ssize_t return_value) : _buffer(buffer),
-                                                                      _size(size),
-                                                                      _return(return_value) {};
+        _size(size),
+        _return(return_value) {};
 
     void set(const void *buffer, size_t size, ssize_t return_value)
     {
@@ -333,7 +339,7 @@ void self_iniated_request_tx(const uint8_t  *tx_buf,
         EXPECT_CALL(fh, read(NotNull(), read_len)).WillOnce(Return(-EAGAIN)).RetiresOnSaturation();
         FileWrite write_1(&(tx_buf[tx_count]), (tx_buf_len - tx_count), 1);
         EXPECT_CALL(fh, write(NotNull(), (tx_buf_len - tx_count)))
-                    .WillOnce(Invoke(&write_1, &FileWrite::write)).RetiresOnSaturation();
+        .WillOnce(Invoke(&write_1, &FileWrite::write)).RetiresOnSaturation();
 
         if (tx_count == tx_buf_len - 1) {
             /* Start frame write sequence gets completed, now start T1 timer. */
@@ -342,7 +348,7 @@ void self_iniated_request_tx(const uint8_t  *tx_buf,
             /* End the write cycle after successfull write made above in this loop. */
             FileWrite write_2(&(tx_buf[tx_count + 1u]), (tx_buf_len - (tx_count + 1u)), 0);
             EXPECT_CALL(fh, write(NotNull(), (tx_buf_len - (tx_count + 1u)))).WillOnce(Invoke(&write_2,
-                        &FileWrite::write)).RetiresOnSaturation();
+                                                                                              &FileWrite::write)).RetiresOnSaturation();
         }
 
         mbed_equeue_stub::deferred_dispatch();
@@ -352,14 +358,12 @@ void self_iniated_request_tx(const uint8_t  *tx_buf,
 }
 
 
-typedef enum
-{
+typedef enum {
     CANCEL_TIMER_NO = 0,
     CANCEL_TIMER_YES
 } CancelTimerType;
 
-typedef enum
-{
+typedef enum {
     START_TIMER_NO = 0,
     START_TIMER_YES
 } StartTimerType;
@@ -400,7 +404,7 @@ void peer_iniated_request_rx_full_frame_tx(FlagSequenceOctetReadType read_type,
         /* Phase 1: read frame start flag. */
         FileRead read(&(rx_buf[rx_count]), FLAG_SEQUENCE_OCTET_LEN, 1);
         EXPECT_CALL(fh, read(NotNull(), FLAG_SEQUENCE_OCTET_LEN))
-                    .WillOnce(Invoke(&read, &FileRead::read)).RetiresOnSaturation();
+        .WillOnce(Invoke(&read, &FileRead::read)).RetiresOnSaturation();
 
         ++rx_count;
     }
@@ -421,7 +425,7 @@ void peer_iniated_request_rx_full_frame_tx(FlagSequenceOctetReadType read_type,
         /* Continue read cycle within current context. */
         file_read_hdr[read_len - 1].set(&(rx_buf[rx_count]), read_len, 1);
         EXPECT_CALL(fh, read(NotNull(), read_len)).WillOnce(Invoke(&(file_read_hdr[read_len - 1]),
-                                                            &FileRead::read)).RetiresOnSaturation();
+                                                                   &FileRead::read)).RetiresOnSaturation();
 
         ++rx_count;
         --read_len;
@@ -458,7 +462,7 @@ void peer_iniated_request_rx_full_frame_tx(FlagSequenceOctetReadType read_type,
     do {
         file_write[i].set(&(write_byte[i]), (tx_buf_len - i), 1);
         EXPECT_CALL(fh, write(NotNull(), (tx_buf_len - i))).WillOnce(Invoke(&(file_write[i]),
-                                                                     &FileWrite::write)).RetiresOnSaturation();
+                                                                            &FileWrite::write)).RetiresOnSaturation();
 
         ++i;
     } while (i != tx_buf_len);
@@ -506,7 +510,7 @@ void self_iniated_response_rx(const uint8_t            *rx_buf,
         /* Phase 1: read frame start flag. */
         FileRead read(&(rx_buf[rx_count]), FLAG_SEQUENCE_OCTET_LEN, 1);
         EXPECT_CALL(fh, read(NotNull(), FLAG_SEQUENCE_OCTET_LEN))
-                    .WillOnce(Invoke(&read, &FileRead::read)).RetiresOnSaturation();
+        .WillOnce(Invoke(&read, &FileRead::read)).RetiresOnSaturation();
 
         ++rx_count;
     }
@@ -527,7 +531,7 @@ void self_iniated_response_rx(const uint8_t            *rx_buf,
         /* Continue read cycle within current context. */
         file_read_hdr[read_len - 1].set(&(rx_buf[rx_count]), read_len, 1);
         EXPECT_CALL(fh, read(NotNull(), read_len)).WillOnce(Invoke(&(file_read_hdr[read_len - 1]),
-                                                            &FileRead::read)).RetiresOnSaturation();
+                                                                   &FileRead::read)).RetiresOnSaturation();
 
         ++rx_count;
         --read_len;
@@ -540,7 +544,7 @@ void self_iniated_response_rx(const uint8_t            *rx_buf,
         /* Continue read cycle within current context. */
         file_read_trailer[read_len - 1].set(&(rx_buf[rx_count]), read_len, 1);
         EXPECT_CALL(fh, read(NotNull(), read_len)).WillOnce(Invoke(&(file_read_trailer[read_len - 1]),
-                                                            &FileRead::read)).RetiresOnSaturation();
+                                                                   &FileRead::read)).RetiresOnSaturation();
 
         ++rx_count;
         --read_len;
@@ -556,12 +560,12 @@ void self_iniated_response_rx(const uint8_t            *rx_buf,
 
         FileWrite write_1(&(resp_write_byte[0]), length_of_frame, 1);
         EXPECT_CALL(fh, write(NotNull(), length_of_frame))
-                    .WillOnce(Invoke(&write_1, &FileWrite::write)).RetiresOnSaturation();
+        .WillOnce(Invoke(&write_1, &FileWrite::write)).RetiresOnSaturation();
 
         /* End TX sequence: this call orginates from tx_internal_resp_entry_run(). */
         FileWrite write_2(&(resp_write_byte[1]), (length_of_frame - 1u), 0);
         EXPECT_CALL(fh, write(NotNull(), (length_of_frame - 1u)))
-                    .WillOnce(Invoke(&write_2, &FileWrite::write)).RetiresOnSaturation();
+        .WillOnce(Invoke(&write_2, &FileWrite::write)).RetiresOnSaturation();
 
         /* Resume the Rx cycle and stop it. */
         EXPECT_CALL(fh, read(NotNull(), FRAME_HEADER_READ_LEN)).WillOnce(Return(-EAGAIN)).RetiresOnSaturation();
@@ -569,7 +573,7 @@ void self_iniated_response_rx(const uint8_t            *rx_buf,
         /* End TX sequence: this call orginates from on_deferred_call(). */
         FileWrite write_3(&(resp_write_byte[1]), (length_of_frame - 1u), 0);
         EXPECT_CALL(fh, write(NotNull(), (length_of_frame - 1u)))
-                    .WillOnce(Invoke(&write_3, &FileWrite::write)).RetiresOnSaturation();
+        .WillOnce(Invoke(&write_3, &FileWrite::write)).RetiresOnSaturation();
     } else {
         if (stop_rx_cycle_type == STOP_RX_CYCLE_YES) {
             /* Resume the Rx cycle and stop it. */
@@ -602,18 +606,18 @@ void single_complete_write_cycle(const uint8_t  *write_byte,
     FileWrite write(write_byte, length, length);
     EXPECT_CALL(fh, write(NotNull(), length)).WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
 
-   if (new_write_byte != NULL) {
-       /* Complete the write request of pending request frame. */
+    if (new_write_byte != NULL) {
+        /* Complete the write request of pending request frame. */
 
         const uint8_t length_of_frame = 4u + (new_write_byte[3] & ~1) + 2u; // @todo: FIX ME: magic numbers.
 
         FileWrite write(new_write_byte, length_of_frame, length_of_frame);
         EXPECT_CALL(fh, write(NotNull(), length_of_frame))
-                    .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
+        .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
 
         /* Request frame write sequence completed, start T1 timer. */
         mbed_equeue_stub::call_in_expect(T1_TIMER_VALUE, 1);
-   }
+    }
 
     /* Trigger deferred call to execute the programmed mocks above. */
     mbed_equeue_stub::deferred_dispatch();
@@ -629,8 +633,7 @@ void channel_open(uint8_t                 dlci,
                   SigIo                  &sig_io)
 {
     const uint32_t address                   = (3u) | (dlci << 2);
-    const uint8_t write_byte_channel_open[6] =
-    {
+    const uint8_t write_byte_channel_open[6] = {
         FLAG_SEQUENCE_OCTET,
         address,
         (FRAME_TYPE_SABM | PF_BIT),
@@ -641,7 +644,7 @@ void channel_open(uint8_t                 dlci,
 
     FileWrite write(&(write_byte_channel_open[0]), sizeof(write_byte_channel_open), sizeof(write_byte_channel_open));
     EXPECT_CALL(fh, write(NotNull(), sizeof(write_byte_channel_open)))
-                .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
+    .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
 
     mbed_equeue_stub::call_in_expect(T1_TIMER_VALUE, 1);
 
@@ -650,8 +653,7 @@ void channel_open(uint8_t                 dlci,
     EXPECT_EQ(NSAPI_ERROR_OK, channel_open_err);
 
     /* Read the channel open response frame. */
-    const uint8_t read_byte_channel_open[5]  =
-    {
+    const uint8_t read_byte_channel_open[5]  = {
         write_byte_channel_open[1],
         (FRAME_TYPE_UA | PF_BIT),
         LENGTH_INDICATOR_OCTET,
@@ -681,8 +683,7 @@ void mux_self_iniated_open(uint8_t                   tx_cycle_read_len,
                            MockFileHandle           &fh,
                            SigIo                    &sig_io)
 {
-    const uint8_t write_byte[6] =
-    {
+    const uint8_t write_byte[6] = {
         FLAG_SEQUENCE_OCTET,
         ADDRESS_MUX_START_REQ_OCTET,
         (FRAME_TYPE_SABM | PF_BIT),
@@ -693,10 +694,10 @@ void mux_self_iniated_open(uint8_t                   tx_cycle_read_len,
 
     FileWrite write_1(&(write_byte[0]), sizeof(write_byte), 1);
     EXPECT_CALL(fh, write(NotNull(), SABM_FRAME_LEN))
-                .WillOnce(Invoke(&write_1, &FileWrite::write)).RetiresOnSaturation();
+    .WillOnce(Invoke(&write_1, &FileWrite::write)).RetiresOnSaturation();
     FileWrite write_2(&(write_byte[1]), (sizeof(write_byte) - 1u), 0);
     EXPECT_CALL(fh, write(NotNull(), (SABM_FRAME_LEN - 1u)))
-                .WillOnce(Invoke(&write_2, &FileWrite::write)).RetiresOnSaturation();
+    .WillOnce(Invoke(&write_2, &FileWrite::write)).RetiresOnSaturation();
 
     /* Start test sequence. Test set mocks. */
     const nsapi_error channel_open_err = mux.channel_open();
@@ -706,8 +707,7 @@ void mux_self_iniated_open(uint8_t                   tx_cycle_read_len,
     self_iniated_request_tx(&(write_byte[1]), (SABM_FRAME_LEN - 1u), tx_cycle_read_len, fh, sig_io);
 
     /* Read the mux open response frame. */
-    const uint8_t read_byte[6] =
-    {
+    const uint8_t read_byte[6] = {
         FLAG_SEQUENCE_OCTET,
         ADDRESS_MUX_START_RESP_OCTET,
         (FRAME_TYPE_UA | PF_BIT),
@@ -717,8 +717,7 @@ void mux_self_iniated_open(uint8_t                   tx_cycle_read_len,
     };
     /* Reception of the mux open response frame starts the channel creation procedure. */
     const uint32_t address                   = (3u) | (DLCI_ID_LOWER_BOUND << 2);
-    const uint8_t write_byte_channel_open[6] =
-    {
+    const uint8_t write_byte_channel_open[6] = {
         FLAG_SEQUENCE_OCTET,
         address,
         (FRAME_TYPE_SABM | PF_BIT),
@@ -733,8 +732,7 @@ void mux_self_iniated_open(uint8_t                   tx_cycle_read_len,
                                           fh, sig_io);
 
     /* Read the channel open response frame. */
-    const uint8_t read_byte_channel_open[5]  =
-    {
+    const uint8_t read_byte_channel_open[5]  = {
         (3u | (1u << 2)),
         (frame_type | PF_BIT),
         LENGTH_INDICATOR_OCTET,
@@ -802,7 +800,7 @@ void peer_iniated_request_rx(const uint8_t            *rx_buf,
         /* Phase 1: read frame start flag. */
         FileRead read(&(rx_buf[rx_count]), FLAG_SEQUENCE_OCTET_LEN, 1);
         EXPECT_CALL(fh, read(NotNull(), FLAG_SEQUENCE_OCTET_LEN))
-                    .WillOnce(Invoke(&read, &FileRead::read)).RetiresOnSaturation();
+        .WillOnce(Invoke(&read, &FileRead::read)).RetiresOnSaturation();
 
         ++rx_count;
     }
@@ -815,7 +813,7 @@ void peer_iniated_request_rx(const uint8_t            *rx_buf,
         /* Continue read cycle within current context. */
         file_read_hdr[read_len - 1].set(&(rx_buf[rx_count]), read_len, 1);
         EXPECT_CALL(fh, read(NotNull(), read_len)).WillOnce(Invoke(&(file_read_hdr[read_len - 1]),
-                                                            &FileRead::read)).RetiresOnSaturation();
+                                                                   &FileRead::read)).RetiresOnSaturation();
 
         ++rx_count;
         --read_len;
@@ -829,7 +827,7 @@ void peer_iniated_request_rx(const uint8_t            *rx_buf,
         /* Continue read cycle within current context. */
         file_read_trailer[read_len - 1].set(&(rx_buf[rx_count]), read_len, 1);
         EXPECT_CALL(fh, read(NotNull(), read_len)).WillOnce(Invoke(&(file_read_trailer[read_len - 1]),
-                                                            &FileRead::read)).RetiresOnSaturation();
+                                                                   &FileRead::read)).RetiresOnSaturation();
 
         ++rx_count;
         --read_len;
@@ -844,12 +842,12 @@ void peer_iniated_request_rx(const uint8_t            *rx_buf,
 
         FileWrite write_1(&(resp_write_byte[0]), length_of_frame, 1);
         EXPECT_CALL(fh, write(NotNull(), length_of_frame))
-                    .WillOnce(Invoke(&write_1, &FileWrite::write)).RetiresOnSaturation();
+        .WillOnce(Invoke(&write_1, &FileWrite::write)).RetiresOnSaturation();
 
         /* End TX sequence: this call orginates from tx_internal_resp_entry_run(). */
         FileWrite write_2(&(resp_write_byte[1]), (length_of_frame - 1u), 0);
         EXPECT_CALL(fh, write(NotNull(), (length_of_frame - 1u)))
-                    .WillOnce(Invoke(&write_2, &FileWrite::write)).RetiresOnSaturation();
+        .WillOnce(Invoke(&write_2, &FileWrite::write)).RetiresOnSaturation();
 
         /* Resume the Rx cycle and stop it. */
         EXPECT_CALL(fh, read(NotNull(), FRAME_HEADER_READ_LEN)).WillOnce(Return(-EAGAIN)).RetiresOnSaturation();
@@ -857,7 +855,7 @@ void peer_iniated_request_rx(const uint8_t            *rx_buf,
         /* End TX sequence: this call orginates from on_deferred_call(). */
         FileWrite write_3(&(resp_write_byte[1]), (length_of_frame - 1u), 0);
         EXPECT_CALL(fh, write(NotNull(), (length_of_frame - 1u)))
-                    .WillOnce(Invoke(&write_3, &FileWrite::write)).RetiresOnSaturation();
+        .WillOnce(Invoke(&write_3, &FileWrite::write)).RetiresOnSaturation();
     } else if (current_tx_write_byte != NULL) {
         /* Resume the Rx cycle and stop it. */
         EXPECT_CALL(fh, read(NotNull(), FRAME_HEADER_READ_LEN)).WillOnce(Return(-EAGAIN)).RetiresOnSaturation();
@@ -865,7 +863,7 @@ void peer_iniated_request_rx(const uint8_t            *rx_buf,
         /* End TX sequence for the current byte in the TX pipeline: this call originates from on_deferred_call(). */
         FileWrite write(&(current_tx_write_byte[0]), current_tx_write_byte_len, 0);
         EXPECT_CALL(fh, write(NotNull(), current_tx_write_byte_len))
-                    .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
+        .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
     } else {
         /* Resume the Rx cycle and stop it. */
         EXPECT_CALL(fh, read(NotNull(), FRAME_HEADER_READ_LEN)).WillOnce(Return(-EAGAIN)).RetiresOnSaturation();
@@ -913,7 +911,7 @@ void peer_iniated_response_tx(const uint8_t  *buf,
 
         FileWrite write_1(&(buf[tx_count]), (buf_len - tx_count), 1);
         EXPECT_CALL(fh, write(NotNull(), (buf_len - tx_count)))
-                    .WillOnce(Invoke(&write_1, &FileWrite::write)).RetiresOnSaturation();
+        .WillOnce(Invoke(&write_1, &FileWrite::write)).RetiresOnSaturation();
 
         if (tx_count == (buf_len - 1)) {
             if (new_tx_byte != NULL) {
@@ -923,16 +921,16 @@ void peer_iniated_response_tx(const uint8_t  *buf,
 
                 FileWrite write_2(&(new_tx_byte[0]), length_of_frame, 1);
                 EXPECT_CALL(fh, write(NotNull(), length_of_frame))
-                            .WillOnce(Invoke(&write_2, &FileWrite::write)).RetiresOnSaturation();
+                .WillOnce(Invoke(&write_2, &FileWrite::write)).RetiresOnSaturation();
 
                 /* End TX cycle. */
                 EXPECT_CALL(fh, write(NotNull(), (length_of_frame - 1u)))
-                            .WillOnce(Return(0)).RetiresOnSaturation();
+                .WillOnce(Return(0)).RetiresOnSaturation();
             }
         } else {
             /* End TX cycle. */
             EXPECT_CALL(fh, write(NotNull(), buf_len - (tx_count + 1u)))
-                        .WillOnce(Return(0)).RetiresOnSaturation();
+            .WillOnce(Return(0)).RetiresOnSaturation();
         }
 
         mbed_equeue_stub::deferred_dispatch();
@@ -967,7 +965,7 @@ void single_byte_read_cycle(const uint8_t  *read_byte,
 
         FileRead read(&(read_byte[rx_count]), (FRAME_HEADER_READ_LEN - rx_count), 1);
         EXPECT_CALL(fh, read(NotNull(), (FRAME_HEADER_READ_LEN - rx_count)))
-                    .WillOnce(Invoke(&read, &FileRead::read)).RetiresOnSaturation();
+        .WillOnce(Invoke(&read, &FileRead::read)).RetiresOnSaturation();
 
         if ((rx_count + 1u) != FRAME_HEADER_READ_LEN) {
             current_read_len = (FRAME_HEADER_READ_LEN - (rx_count + 1u));
@@ -993,12 +991,12 @@ void single_byte_read_cycle(const uint8_t  *read_byte,
 
         FileRead read(&(read_byte[rx_count]), (length - rx_count), 1);
         EXPECT_CALL(fh, read(NotNull(), (length - rx_count)))
-                    .WillOnce(Invoke(&read, &FileRead::read)).RetiresOnSaturation();
+        .WillOnce(Invoke(&read, &FileRead::read)).RetiresOnSaturation();
 
         if ((rx_count + 1u) != length) {
             /* Stop the read cycle. */
             EXPECT_CALL(fh, read(NotNull(), (length - (rx_count + 1u))))
-                        .WillOnce(Return(-EAGAIN)).RetiresOnSaturation();
+            .WillOnce(Return(-EAGAIN)).RetiresOnSaturation();
         }
 
         /* Trigger deferred call to execute the programmed mocks above. */
@@ -1040,7 +1038,7 @@ TEST_F(TestMux, channel_open_mux_not_open)
 
     MuxCallbackTest callback;
     obj.callback_attach(mbed::Callback<void(mbed::MuxBase::event_context_t &)>(&callback,
-                        &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
+                                                                               &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
 
     mux_self_iniated_open(callback, FRAME_TYPE_UA, STOP_RX_CYCLE_YES, obj, fh, sig_io);
 
@@ -1088,10 +1086,9 @@ TEST_F(TestMux, channel_open_mux_open_currently_running)
 
     MuxCallbackTest callback;
     obj.callback_attach(mbed::Callback<void(mbed::MuxBase::event_context_t &)>(&callback,
-                        &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
+                                                                               &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
 
-    const uint8_t write_byte_mux_open[6] =
-    {
+    const uint8_t write_byte_mux_open[6] = {
         FLAG_SEQUENCE_OCTET,
         ADDRESS_MUX_START_REQ_OCTET,
         (FRAME_TYPE_SABM | PF_BIT),
@@ -1103,10 +1100,10 @@ TEST_F(TestMux, channel_open_mux_open_currently_running)
     /* Program TX of 1st byte of open multiplexer control channel request. */
     FileWrite write_1(&(write_byte_mux_open[0]), sizeof(write_byte_mux_open), 1);
     EXPECT_CALL(fh, write(NotNull(), SABM_FRAME_LEN))
-                .WillOnce(Invoke(&write_1, &FileWrite::write)).RetiresOnSaturation();
+    .WillOnce(Invoke(&write_1, &FileWrite::write)).RetiresOnSaturation();
     FileWrite write_2(&(write_byte_mux_open[1]), (sizeof(write_byte_mux_open) - 1u), 0);
     EXPECT_CALL(fh, write(NotNull(), (SABM_FRAME_LEN - 1u)))
-                .WillOnce(Invoke(&write_2, &FileWrite::write)).RetiresOnSaturation();
+    .WillOnce(Invoke(&write_2, &FileWrite::write)).RetiresOnSaturation();
 
     /* Start test sequence. */
     nsapi_error channel_open_err = obj.channel_open();
@@ -1126,8 +1123,7 @@ TEST_F(TestMux, channel_open_mux_open_currently_running)
 
     /* Receive open multiplexer control channel response message. */
 
-    const uint8_t read_byte[6] =
-    {
+    const uint8_t read_byte[6] = {
         FLAG_SEQUENCE_OCTET,
         ADDRESS_MUX_START_RESP_OCTET,
         (FRAME_TYPE_UA | PF_BIT),
@@ -1137,8 +1133,7 @@ TEST_F(TestMux, channel_open_mux_open_currently_running)
     };
     /* Reception of the mux open response frame starts the channel creation procedure. */
     const uint32_t address_1st_channel_open = (3u) | (1u << 2);
-    uint8_t write_byte_1st_channel_open[6]  =
-    {
+    uint8_t write_byte_1st_channel_open[6]  = {
         FLAG_SEQUENCE_OCTET,
         address_1st_channel_open,
         (FRAME_TYPE_SABM | PF_BIT),
@@ -1154,8 +1149,7 @@ TEST_F(TestMux, channel_open_mux_open_currently_running)
 
     /* Read the channel open response frame. */
     callback.callback_arm();
-    const uint8_t read_byte_channel_open[5]  =
-    {
+    const uint8_t read_byte_channel_open[5]  = {
         (3u | (1u << 2)),
         (FRAME_TYPE_UA | PF_BIT),
         LENGTH_INDICATOR_OCTET,
@@ -1173,8 +1167,7 @@ TEST_F(TestMux, channel_open_mux_open_currently_running)
     /* Program TX of 1st byte of open channel request. */
 
     const uint32_t address_2nd_channel_open = (3u) | (2u << 2);
-    uint8_t write_byte_2nd_channel_open[6]  =
-    {
+    uint8_t write_byte_2nd_channel_open[6]  = {
         FLAG_SEQUENCE_OCTET,
         address_2nd_channel_open,
         (FRAME_TYPE_SABM | PF_BIT),
@@ -1184,10 +1177,10 @@ TEST_F(TestMux, channel_open_mux_open_currently_running)
     };
     FileWrite write_3(&(write_byte_2nd_channel_open[0]), sizeof(write_byte_2nd_channel_open), 1);
     EXPECT_CALL(fh, write(NotNull(), SABM_FRAME_LEN))
-                .WillOnce(Invoke(&write_3, &FileWrite::write)).RetiresOnSaturation();
+    .WillOnce(Invoke(&write_3, &FileWrite::write)).RetiresOnSaturation();
     FileWrite write_4(&(write_byte_2nd_channel_open[1]), (sizeof(write_byte_2nd_channel_open) - 1u), 0);
     EXPECT_CALL(fh, write(NotNull(), (SABM_FRAME_LEN - 1u)))
-                .WillOnce(Invoke(&write_4, &FileWrite::write)).RetiresOnSaturation();
+    .WillOnce(Invoke(&write_4, &FileWrite::write)).RetiresOnSaturation();
 
     /* Start test sequence. */
     channel_open_err = obj.channel_open();
@@ -1236,11 +1229,10 @@ TEST_F(TestMux, mux_open_dm_tx_currently_running)
 
     MuxCallbackTest callback;
     obj.callback_attach(mbed::Callback<void(mbed::MuxBase::event_context_t &)>(&callback,
-                        &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
+                                                                               &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
 
     const uint8_t dlci_id      = 0;
-    const uint8_t read_byte[6] =
-    {
+    const uint8_t read_byte[6] = {
         FLAG_SEQUENCE_OCTET,
         /* Peer assumes the role of initiator. */
         3u | (dlci_id << 2),
@@ -1252,8 +1244,7 @@ TEST_F(TestMux, mux_open_dm_tx_currently_running)
 
     /* Generate DISC from peer and trigger TX of DM response, do not finish it. */
 
-    const uint8_t write_byte_dm[6] =
-    {
+    const uint8_t write_byte_dm[6] = {
         FLAG_SEQUENCE_OCTET,
         3u | (dlci_id << 2),
         (FRAME_TYPE_DM | PF_BIT),
@@ -1277,8 +1268,7 @@ TEST_F(TestMux, mux_open_dm_tx_currently_running)
     /* Finish sending DM response message and start TX of 1st byte of the pending open multiplexer control channel
      * request message. */
 
-    const uint8_t write_byte_mux_open[6] =
-    {
+    const uint8_t write_byte_mux_open[6] = {
         FLAG_SEQUENCE_OCTET,
         ADDRESS_MUX_START_REQ_OCTET,
         (FRAME_TYPE_SABM | PF_BIT),
@@ -1287,7 +1277,7 @@ TEST_F(TestMux, mux_open_dm_tx_currently_running)
         FLAG_SEQUENCE_OCTET
     };
     peer_iniated_response_tx(&(write_byte_dm[1]),
-                             (DM_FRAME_LEN -1u),
+                             (DM_FRAME_LEN - 1u),
                              &(write_byte_mux_open[0]),
                              false,
                              NULL,
@@ -1297,8 +1287,7 @@ TEST_F(TestMux, mux_open_dm_tx_currently_running)
     /* Finish sending open multiplexer control channel request message, receive open multiplexer control channel
      * response message, which starts the user channel creation procedure. */
 
-    const uint8_t read_byte_mux_open[5] =
-    {
+    const uint8_t read_byte_mux_open[5] = {
         ADDRESS_MUX_START_RESP_OCTET,
         (FRAME_TYPE_UA | PF_BIT),
         LENGTH_INDICATOR_OCTET,
@@ -1312,8 +1301,7 @@ TEST_F(TestMux, mux_open_dm_tx_currently_running)
                             sig_io);
 
     const uint32_t address_1st_channel_open = (3u) | (1u << 2);
-    uint8_t write_byte_1st_channel_open[6]  =
-    {
+    uint8_t write_byte_1st_channel_open[6]  = {
         FLAG_SEQUENCE_OCTET,
         address_1st_channel_open,
         (FRAME_TYPE_SABM | PF_BIT),
@@ -1330,8 +1318,7 @@ TEST_F(TestMux, mux_open_dm_tx_currently_running)
     /* Receive open user channel response message. */
 
     callback.callback_arm();
-    const uint8_t read_byte_channel_open[5]  =
-    {
+    const uint8_t read_byte_channel_open[5]  = {
         (3u | (1u << 2)),
         (FRAME_TYPE_UA | PF_BIT),
         LENGTH_INDICATOR_OCTET,
@@ -1405,10 +1392,9 @@ TEST_F(TestMux, channel_open_mux_open_rejected_by_peer)
 
     MuxCallbackTest callback;
     obj.callback_attach(mbed::Callback<void(mbed::MuxBase::event_context_t &)>(&callback,
-                        &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
+                                                                               &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
 
-    const uint8_t write_byte_mux_open[6] =
-    {
+    const uint8_t write_byte_mux_open[6] = {
         FLAG_SEQUENCE_OCTET,
         ADDRESS_MUX_START_REQ_OCTET,
         (FRAME_TYPE_SABM | PF_BIT),
@@ -1419,10 +1405,10 @@ TEST_F(TestMux, channel_open_mux_open_rejected_by_peer)
 
     FileWrite write(&(write_byte_mux_open[0]), sizeof(write_byte_mux_open), 1);
     EXPECT_CALL(fh, write(NotNull(), sizeof(write_byte_mux_open)))
-                .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
+    .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
     /* End TX cycle. */
     EXPECT_CALL(fh, write(NotNull(), sizeof(write_byte_mux_open) - sizeof(write_byte_mux_open[0])))
-                .WillOnce(Return(0)).RetiresOnSaturation();
+    .WillOnce(Return(0)).RetiresOnSaturation();
 
     /* Start test sequence. Test set mocks. */
     const nsapi_error channel_open_err = obj.channel_open();
@@ -1433,8 +1419,7 @@ TEST_F(TestMux, channel_open_mux_open_rejected_by_peer)
 
     /* Peer rejects open multiplexer control channel request message with appropriate response message. */
 
-    const uint8_t read_byte_mux_open[6] =
-    {
+    const uint8_t read_byte_mux_open[6] = {
         FLAG_SEQUENCE_OCTET,
         ADDRESS_MUX_START_RESP_OCTET,
         (FRAME_TYPE_DM | PF_BIT),
@@ -1497,10 +1482,9 @@ TEST_F(TestMux, channel_open_mux_open_success_after_timeout)
 
     MuxCallbackTest callback;
     obj.callback_attach(mbed::Callback<void(mbed::MuxBase::event_context_t &)>(&callback,
-                        &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
+                                                                               &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
 
-    const uint8_t write_byte_mux_open[6] =
-    {
+    const uint8_t write_byte_mux_open[6] = {
         FLAG_SEQUENCE_OCTET,
         ADDRESS_MUX_START_REQ_OCTET,
         (FRAME_TYPE_SABM | PF_BIT),
@@ -1511,10 +1495,10 @@ TEST_F(TestMux, channel_open_mux_open_success_after_timeout)
 
     FileWrite write(&(write_byte_mux_open[0]), sizeof(write_byte_mux_open), 1);
     EXPECT_CALL(fh, write(NotNull(), sizeof(write_byte_mux_open)))
-                .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
+    .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
     /* End TX cycle. */
     EXPECT_CALL(fh, write(NotNull(), sizeof(write_byte_mux_open) - sizeof(write_byte_mux_open[0])))
-                .WillOnce(Return(0)).RetiresOnSaturation();
+    .WillOnce(Return(0)).RetiresOnSaturation();
 
     /* Start test sequence. Test set mocks. */
     const nsapi_error channel_open_err = obj.channel_open();
@@ -1531,10 +1515,10 @@ TEST_F(TestMux, channel_open_mux_open_success_after_timeout)
     do {
         FileWrite write(&(write_byte_mux_open[0]), sizeof(write_byte_mux_open), 1);
         EXPECT_CALL(fh, write(NotNull(), sizeof(write_byte_mux_open)))
-                    .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
+        .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
         /* End TX cycle. */
         EXPECT_CALL(fh, write(NotNull(), sizeof(write_byte_mux_open) - sizeof(write_byte_mux_open[0])))
-                    .WillOnce(Return(0)).RetiresOnSaturation();
+        .WillOnce(Return(0)).RetiresOnSaturation();
 
         /* Trigger timer timeout. */
         mbed_equeue_stub::timer_dispatch();
@@ -1590,10 +1574,9 @@ TEST_F(TestMux, mux_open_peer_initiated)
 
     MuxCallbackTest callback;
     obj.callback_attach(mbed::Callback<void(mbed::MuxBase::event_context_t &)>(&callback,
-                        &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
+                                                                               &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
 
-    const uint8_t read_byte[6] =
-    {
+    const uint8_t read_byte[6] = {
         FLAG_SEQUENCE_OCTET,
         ADDRESS_MUX_START_REQ_OCTET,
         (FRAME_TYPE_SABM | PF_BIT),
@@ -1634,7 +1617,7 @@ TEST_F(TestMux, mux_open_rx_disc_dlci_0)
 
     MuxCallbackTest callback;
     obj.callback_attach(mbed::Callback<void(mbed::MuxBase::event_context_t &)>(&callback,
-                        &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
+                                                                               &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Open multiplexer control channel and user channel. */
 
@@ -1647,8 +1630,7 @@ TEST_F(TestMux, mux_open_rx_disc_dlci_0)
     /* Generate DISC from peer which is ignored by the implementation. */
 
     const uint8_t dlci_id      = 0;
-    const uint8_t read_byte[5] =
-    {
+    const uint8_t read_byte[5] = {
         /* Peer assumes the role of the responder. */
         1u | (dlci_id << 2),
         (FRAME_TYPE_DISC | PF_BIT),
@@ -1688,7 +1670,7 @@ TEST_F(TestMux, mux_open_rx_disc_dlci_in_use)
 
     MuxCallbackTest callback;
     obj.callback_attach(mbed::Callback<void(mbed::MuxBase::event_context_t &)>(&callback,
-                        &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
+                                                                               &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Open multiplexer control channel and user channel. */
 
@@ -1698,8 +1680,7 @@ TEST_F(TestMux, mux_open_rx_disc_dlci_in_use)
     EXPECT_TRUE(callback.is_callback_called());
     EXPECT_TRUE(callback.file_handle_get() != NULL);
 
-    const uint8_t read_byte[5] =
-    {
+    const uint8_t read_byte[5] = {
         /* Peer assumes the role of the responder. */
         1u | (1u << 2),
         (FRAME_TYPE_DISC | PF_BIT),
@@ -1741,12 +1722,11 @@ TEST_F(TestMux, channel_open_mux_open_tx_in_call_context)
 
     MuxCallbackTest callback;
     obj.callback_attach(mbed::Callback<void(mbed::MuxBase::event_context_t &)>(&callback,
-                        &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
+                                                                               &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Send multiplexer open request within the call context. */
 
-    const uint8_t write_byte_mux_open[6] =
-    {
+    const uint8_t write_byte_mux_open[6] = {
         FLAG_SEQUENCE_OCTET,
         ADDRESS_MUX_START_REQ_OCTET,
         (FRAME_TYPE_SABM | PF_BIT),
@@ -1761,7 +1741,7 @@ TEST_F(TestMux, channel_open_mux_open_tx_in_call_context)
     do {
         file_write[i].set(&(write_byte_mux_open[i]), (SABM_FRAME_LEN - i), 1);
         EXPECT_CALL(fh, write(NotNull(), (SABM_FRAME_LEN - i))).WillOnce(Invoke(&(file_write[i]),
-                                                                &FileWrite::write)).RetiresOnSaturation();
+                                                                                &FileWrite::write)).RetiresOnSaturation();
 
         ++i;
     } while (i != sizeof(write_byte_mux_open));
@@ -1774,8 +1754,7 @@ TEST_F(TestMux, channel_open_mux_open_tx_in_call_context)
 
     /* Receive multiplexer open response, and send open user channel request. */
 
-    const uint8_t read_byte_mux_open[6] =
-    {
+    const uint8_t read_byte_mux_open[6] = {
         FLAG_SEQUENCE_OCTET,
         ADDRESS_MUX_START_RESP_OCTET,
         (FRAME_TYPE_UA | PF_BIT),
@@ -1785,8 +1764,7 @@ TEST_F(TestMux, channel_open_mux_open_tx_in_call_context)
     };
 
     const uint32_t address_1st_channel_open = (3u) | (1u << 2);
-    uint8_t write_byte_1st_channel_open[6]  =
-    {
+    uint8_t write_byte_1st_channel_open[6]  = {
         FLAG_SEQUENCE_OCTET,
         address_1st_channel_open,
         (FRAME_TYPE_SABM | PF_BIT),
@@ -1802,8 +1780,7 @@ TEST_F(TestMux, channel_open_mux_open_tx_in_call_context)
 
     /* Receive open user channel response message. */
     callback.callback_arm();
-    const uint8_t read_byte_channel_open[5]  =
-    {
+    const uint8_t read_byte_channel_open[5]  = {
         (3u | (1u << 2)),
         (FRAME_TYPE_UA | PF_BIT),
         LENGTH_INDICATOR_OCTET,
@@ -1858,7 +1835,7 @@ TEST_F(TestMux, channel_open_success_after_timeout)
 
     MuxCallbackTest callback;
     obj.callback_attach(mbed::Callback<void(mbed::MuxBase::event_context_t &)>(&callback,
-                        &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
+                                                                               &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish user channel. */
 
@@ -1869,8 +1846,7 @@ TEST_F(TestMux, channel_open_success_after_timeout)
     EXPECT_TRUE(callback.file_handle_get() != NULL);
 
     const uint32_t address                   = (3u) | (2u << 2);
-    const uint8_t write_byte_channel_open[6] =
-    {
+    const uint8_t write_byte_channel_open[6] = {
         FLAG_SEQUENCE_OCTET,
         address,
         (FRAME_TYPE_SABM | PF_BIT),
@@ -1881,10 +1857,10 @@ TEST_F(TestMux, channel_open_success_after_timeout)
 
     FileWrite write(&(write_byte_channel_open[0]), sizeof(write_byte_channel_open), 1);
     EXPECT_CALL(fh, write(NotNull(), sizeof(write_byte_channel_open)))
-                .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
+    .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
     /* End TX cycle. */
     EXPECT_CALL(fh, write(NotNull(), sizeof(write_byte_channel_open) - sizeof(write_byte_channel_open[0])))
-                .WillOnce(Return(0)).RetiresOnSaturation();
+    .WillOnce(Return(0)).RetiresOnSaturation();
 
     /* Start test sequence. Test set mocks. */
     const nsapi_error channel_open_err = obj.channel_open();
@@ -1900,10 +1876,10 @@ TEST_F(TestMux, channel_open_success_after_timeout)
     do {
         FileWrite write(&(write_byte_channel_open[0]), sizeof(write_byte_channel_open), 1);
         EXPECT_CALL(fh, write(NotNull(), sizeof(write_byte_channel_open)))
-                    .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
+        .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
         /* End TX cycle. */
         EXPECT_CALL(fh, write(NotNull(), sizeof(write_byte_channel_open) - sizeof(write_byte_channel_open[0])))
-                    .WillOnce(Return(0)).RetiresOnSaturation();
+        .WillOnce(Return(0)).RetiresOnSaturation();
 
         /* Trigger timer timeout. */
         mbed_equeue_stub::timer_dispatch();
@@ -1962,7 +1938,7 @@ TEST_F(TestMux, channel_open_all_channel_ids_used)
 
     MuxCallbackTest callback;
     obj.callback_attach(mbed::Callback<void(mbed::MuxBase::event_context_t &)>(&callback,
-                        &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
+                                                                               &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish a user channel. */
 
@@ -1982,7 +1958,7 @@ TEST_F(TestMux, channel_open_all_channel_ids_used)
         EXPECT_TRUE(callback.is_callback_called());
         EXPECT_TRUE(callback.file_handle_get() != NULL);
 
-       ++dlci_id;
+        ++dlci_id;
         --i;
     } while (i != 0);
 
@@ -1993,7 +1969,7 @@ TEST_F(TestMux, channel_open_all_channel_ids_used)
 }
 
 
-bool is_file_handle_uniqueue(mbed::FileHandle* obj, uint8_t current_idx)
+bool is_file_handle_uniqueue(mbed::FileHandle *obj, uint8_t current_idx)
 {
     if (current_idx == 0) {
         return true;
@@ -2038,7 +2014,7 @@ TEST_F(TestMux, channel_open_all_channel_ids_used_ensure_uniqueue)
 
     MuxCallbackTest callback;
     obj.callback_attach(mbed::Callback<void(mbed::MuxBase::event_context_t &)>(&callback,
-                        &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
+                                                                               &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish a user channel. */
 
@@ -2069,8 +2045,8 @@ TEST_F(TestMux, channel_open_all_channel_ids_used_ensure_uniqueue)
         EXPECT_TRUE(bool_check);
         m_file_handle[fh_counter] = fh;
 
-       ++fh_counter;
-       ++dlci_id;
+        ++fh_counter;
+        ++dlci_id;
         --i;
     } while (i != 0);
 
@@ -2114,7 +2090,7 @@ TEST_F(TestMux, channel_open_rejected_by_peer)
 
     MuxCallbackTest callback;
     obj.callback_attach(mbed::Callback<void(mbed::MuxBase::event_context_t &)>(&callback,
-                        &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
+                                                                               &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish multiplexer control channel. Peer rejects user channel request message with appropriate response
        message. */
@@ -2164,7 +2140,7 @@ TEST_F(TestMux, dlci_establish_peer_initiated)
 
     MuxCallbackTest callback;
     obj.callback_attach(mbed::Callback<void(mbed::MuxBase::event_context_t &)>(&callback,
-                        &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
+                                                                               &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish a user channel. */
 
@@ -2174,8 +2150,7 @@ TEST_F(TestMux, dlci_establish_peer_initiated)
     EXPECT_TRUE(callback.is_callback_called());
     EXPECT_TRUE(callback.file_handle_get() != NULL);
 
-    const uint8_t read_byte[5] =
-    {
+    const uint8_t read_byte[5] = {
         1u | ((DLCI_ID_LOWER_BOUND + 1u) << 2),
         (FRAME_TYPE_SABM | PF_BIT),
         LENGTH_INDICATOR_OCTET,
@@ -2222,7 +2197,7 @@ TEST_F(TestMux, channel_open_dm_tx_currently_running)
 
     MuxCallbackTest callback;
     obj.callback_attach(mbed::Callback<void(mbed::MuxBase::event_context_t &)>(&callback,
-                        &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
+                                                                               &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish a user channel. */
 
@@ -2233,8 +2208,7 @@ TEST_F(TestMux, channel_open_dm_tx_currently_running)
     EXPECT_TRUE(callback.file_handle_get() != NULL);
 
     const uint8_t dlci_id           = DLCI_ID_LOWER_BOUND + 1u;
-    const uint8_t read_byte_disc[5] =
-    {
+    const uint8_t read_byte_disc[5] = {
         1u | (dlci_id << 2),
         (FRAME_TYPE_DISC | PF_BIT),
         LENGTH_INDICATOR_OCTET,
@@ -2244,8 +2218,7 @@ TEST_F(TestMux, channel_open_dm_tx_currently_running)
 
     /* Generate DISC from peer and trigger TX of DM response, do not finish it. */
 
-    const uint8_t write_byte_dm[6] =
-    {
+    const uint8_t write_byte_dm[6] = {
         FLAG_SEQUENCE_OCTET,
         1u | (dlci_id << 2),
         (FRAME_TYPE_DM | PF_BIT),
@@ -2275,8 +2248,7 @@ TEST_F(TestMux, channel_open_dm_tx_currently_running)
     /* Finish sending DM response message and start TX of 1st byte of the pending open user channel request message. */
 
     const uint32_t address_channel_open      = (3u) | ((DLCI_ID_LOWER_BOUND + 1u) << 2);
-    const uint8_t write_byte_channel_open[6] =
-    {
+    const uint8_t write_byte_channel_open[6] = {
         FLAG_SEQUENCE_OCTET,
         address_channel_open,
         (FRAME_TYPE_SABM | PF_BIT),
@@ -2285,7 +2257,7 @@ TEST_F(TestMux, channel_open_dm_tx_currently_running)
         FLAG_SEQUENCE_OCTET
     };
     peer_iniated_response_tx(&(write_byte_dm[1]),
-                             (DM_FRAME_LEN -1u),
+                             (DM_FRAME_LEN - 1u),
                              &(write_byte_channel_open[0]),
                              false,
                              NULL,
@@ -2294,8 +2266,7 @@ TEST_F(TestMux, channel_open_dm_tx_currently_running)
 
     /* Finish sending open user channel request message, receive open user channel channel response message. */
 
-    const uint8_t read_byte_channel_open[5] =
-    {
+    const uint8_t read_byte_channel_open[5] = {
         address_channel_open,
         (FRAME_TYPE_UA | PF_BIT),
         LENGTH_INDICATOR_OCTET,
@@ -2357,7 +2328,7 @@ TEST_F(TestMux, user_tx_0_length_user_payload)
 
     MuxCallbackTest callback;
     obj.callback_attach(mbed::Callback<void(mbed::MuxBase::event_context_t &)>(&callback,
-                        &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
+                                                                               &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish a user channel. */
 
@@ -2384,16 +2355,16 @@ static void user_tx_size_lower_bound_tx_callback()
 }
 
 
- /*
- * TC - Ensure proper behaviour when 1 byte length UIH frame TX is done
- *
- * Test sequence:
- * - Establish  a user channel
- * - Issue 1 byte length write request to the channel
- *
- * Expected outcome:
- * - Request accepted by the implementation
- */
+/*
+* TC - Ensure proper behaviour when 1 byte length UIH frame TX is done
+*
+* Test sequence:
+* - Establish  a user channel
+* - Issue 1 byte length write request to the channel
+*
+* Expected outcome:
+* - Request accepted by the implementation
+*/
 TEST_F(TestMux, user_tx_size_lower_bound)
 {
     InSequence dummy;
@@ -2412,7 +2383,7 @@ TEST_F(TestMux, user_tx_size_lower_bound)
 
     MuxCallbackTest callback;
     obj.callback_attach(mbed::Callback<void(mbed::MuxBase::event_context_t &)>(&callback,
-                        &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
+                                                                               &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish a user channel. */
 
@@ -2428,8 +2399,7 @@ TEST_F(TestMux, user_tx_size_lower_bound)
     /* Program write cycle. */
     const uint8_t dlci_id       = 1u;
     uint8_t user_data           = 0xA5u;
-    const uint8_t write_byte[7] =
-    {
+    const uint8_t write_byte[7] = {
         FLAG_SEQUENCE_OCTET,
         3u | (dlci_id << 2),
         FRAME_TYPE_UIH,
@@ -2441,14 +2411,14 @@ TEST_F(TestMux, user_tx_size_lower_bound)
 
     FileWrite write(&(write_byte[0]), sizeof(write_byte), sizeof(write_byte));
     EXPECT_CALL(fh_mock, write(NotNull(), sizeof(write_byte)))
-                .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
+    .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
 
     const ssize_t write_ret = fh->write(&user_data, sizeof(user_data));
     EXPECT_EQ(sizeof(user_data), write_ret);
 }
 
 
-static void sequence_generate(uint8_t* write_byte, uint8_t count)
+static void sequence_generate(uint8_t *write_byte, uint8_t count)
 {
     while (count != 0) {
         *write_byte = count;
@@ -2459,19 +2429,19 @@ static void sequence_generate(uint8_t* write_byte, uint8_t count)
 }
 
 
- /*
- * TC - Ensure proper behaviour when MAX length and out-of-bound length UIH frame TX in 1 write call is done
- *
- * Test sequence:
- * - Establish  a user channel
- * - 1) Issue MAX length UIH frame write request to the channel
- * - 2) Issue out-of-bound length UIH frame write request to the channel.
- *
- * Expected outcome:
- * - Request accepted by the implementation
- * - write done in 1 write call
- * - For out-of-bound length UIH frame actual write size is adjusted to max available size
- */
+/*
+* TC - Ensure proper behaviour when MAX length and out-of-bound length UIH frame TX in 1 write call is done
+*
+* Test sequence:
+* - Establish  a user channel
+* - 1) Issue MAX length UIH frame write request to the channel
+* - 2) Issue out-of-bound length UIH frame write request to the channel.
+*
+* Expected outcome:
+* - Request accepted by the implementation
+* - write done in 1 write call
+* - For out-of-bound length UIH frame actual write size is adjusted to max available size
+*/
 TEST_F(TestMux, user_tx_size_upper_bound_and_oob)
 {
     InSequence dummy;
@@ -2490,7 +2460,7 @@ TEST_F(TestMux, user_tx_size_upper_bound_and_oob)
 
     MuxCallbackTest callback;
     obj.callback_attach(mbed::Callback<void(mbed::MuxBase::event_context_t &)>(&callback,
-                        &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
+                                                                               &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish a user channel. */
 
@@ -2520,7 +2490,7 @@ TEST_F(TestMux, user_tx_size_upper_bound_and_oob)
 
     FileWrite write(&(write_byte[0]), sizeof(write_byte), sizeof(write_byte));
     EXPECT_CALL(fh_mock, write(NotNull(), sizeof(write_byte)))
-                .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
+    .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
 
     ssize_t ret = fh->write(&(write_byte[4]), (TX_BUFFER_SIZE - 6u));
     EXPECT_EQ((TX_BUFFER_SIZE - 6u), ret);
@@ -2528,7 +2498,7 @@ TEST_F(TestMux, user_tx_size_upper_bound_and_oob)
     /* Issue out-of-bound length UIH frame write request to the channel. */
 
     EXPECT_CALL(fh_mock, write(NotNull(), sizeof(write_byte)))
-                .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
+    .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
 
     ret = fh->write(&(write_byte[4]), (TX_BUFFER_SIZE - 6u + 1u));
     EXPECT_EQ((TX_BUFFER_SIZE - 6u), ret);
@@ -2571,7 +2541,7 @@ TEST_F(TestMux, user_tx_2_full_frame_writes)
 
     MuxCallbackTest callback;
     obj.callback_attach(mbed::Callback<void(mbed::MuxBase::event_context_t &)>(&callback,
-                        &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
+                                                                               &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish a user channel. */
 
@@ -2587,8 +2557,7 @@ TEST_F(TestMux, user_tx_2_full_frame_writes)
     /* Program write cycle, complete in 1 write call within the call context. */
     const uint8_t dlci_id         = 1u;
     uint8_t user_data             = 0xA5u;
-    const uint8_t write_byte_1[7] =
-    {
+    const uint8_t write_byte_1[7] = {
         FLAG_SEQUENCE_OCTET,
         3u | (dlci_id << 2),
         FRAME_TYPE_UIH,
@@ -2600,15 +2569,14 @@ TEST_F(TestMux, user_tx_2_full_frame_writes)
 
     FileWrite write_1(&(write_byte_1[0]), sizeof(write_byte_1), sizeof(write_byte_1));
     EXPECT_CALL(fh_mock, write(NotNull(), sizeof(write_byte_1)))
-                .WillOnce(Invoke(&write_1, &FileWrite::write)).RetiresOnSaturation();
+    .WillOnce(Invoke(&write_1, &FileWrite::write)).RetiresOnSaturation();
 
     ssize_t write_ret = fh->write(&user_data, sizeof(user_data));
     EXPECT_EQ(sizeof(user_data), write_ret);
 
     /* Program write cycle, complete in 1 write call within the call context. */
     ++user_data;
-    const uint8_t write_byte_2[7] =
-    {
+    const uint8_t write_byte_2[7] = {
         FLAG_SEQUENCE_OCTET,
         3u | (dlci_id << 2),
         FRAME_TYPE_UIH,
@@ -2620,7 +2588,7 @@ TEST_F(TestMux, user_tx_2_full_frame_writes)
 
     FileWrite write_2(&(write_byte_2[0]), sizeof(write_byte_2), sizeof(write_byte_2));
     EXPECT_CALL(fh_mock, write(NotNull(), sizeof(write_byte_2)))
-                .WillOnce(Invoke(&write_2, &FileWrite::write)).RetiresOnSaturation();
+    .WillOnce(Invoke(&write_2, &FileWrite::write)).RetiresOnSaturation();
 
     write_ret = fh->write(&user_data, sizeof(user_data));
     EXPECT_EQ(sizeof(user_data), write_ret);
@@ -2665,7 +2633,7 @@ TEST_F(TestMux, user_tx_dlci_establish_during_user_tx)
 
     MuxCallbackTest callback;
     obj.callback_attach(mbed::Callback<void(mbed::MuxBase::event_context_t &)>(&callback,
-                        &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
+                                                                               &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish a user channel. */
 
@@ -2681,8 +2649,7 @@ TEST_F(TestMux, user_tx_dlci_establish_during_user_tx)
     /* Start user TX write cycle, not finished. */
 
     const uint8_t user_data         = 0xA5u;
-    const uint8_t write_byte_uih[7] =
-    {
+    const uint8_t write_byte_uih[7] = {
         FLAG_SEQUENCE_OCTET,
         3u | (DLCI_ID_LOWER_BOUND << 2),
         FRAME_TYPE_UIH,
@@ -2693,10 +2660,10 @@ TEST_F(TestMux, user_tx_dlci_establish_during_user_tx)
     };
     FileWrite write(&(write_byte_uih[0]), sizeof(write_byte_uih), 1);
     EXPECT_CALL(fh_mock, write(NotNull(), sizeof(write_byte_uih)))
-                .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
+    .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
     /* End TX cycle. */
     EXPECT_CALL(fh_mock, write(NotNull(), sizeof(write_byte_uih) - sizeof(write_byte_uih[0])))
-                .WillOnce(Return(0)).RetiresOnSaturation();
+    .WillOnce(Return(0)).RetiresOnSaturation();
 
     const ssize_t write_ret = fh->write(&user_data, sizeof(user_data));
     EXPECT_EQ(sizeof(user_data), write_ret);
@@ -2708,8 +2675,7 @@ TEST_F(TestMux, user_tx_dlci_establish_during_user_tx)
 
     /* Finish TX cycle for user TX. */
 
-    const uint8_t write_byte_sabm[6] =
-    {
+    const uint8_t write_byte_sabm[6] = {
         FLAG_SEQUENCE_OCTET,
         3u | ((DLCI_ID_LOWER_BOUND + 1u) << 2),
         (FRAME_TYPE_SABM | PF_BIT),
@@ -2721,8 +2687,7 @@ TEST_F(TestMux, user_tx_dlci_establish_during_user_tx)
 
     /* Finish the pending DLCI establishment cycle. */
 
-    const uint8_t read_byte_sabm[5] =
-    {
+    const uint8_t read_byte_sabm[5] = {
         3u | ((DLCI_ID_LOWER_BOUND + 1u) << 2),
         (FRAME_TYPE_UA | PF_BIT),
         LENGTH_INDICATOR_OCTET,
@@ -2750,8 +2715,7 @@ static void tx_callback_dispatch_triggered_tx_within_callback_tx_callback()
 {
     static const uint8_t user_data = 2u;
     /* Needs to be static as referenced after this function returns. */
-    static const uint8_t write_byte[7] =
-    {
+    static const uint8_t write_byte[7] = {
         FLAG_SEQUENCE_OCTET,
         3u | (1u << 2),
         FRAME_TYPE_UIH,
@@ -2770,7 +2734,7 @@ static void tx_callback_dispatch_triggered_tx_within_callback_tx_callback()
 
             /* Issue new write to the same DLCI within the callback context. */
             EXPECT_CALL(m_fh_mock, write(NotNull(), sizeof(write_byte)))
-                        .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
+            .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
 
             /* This write is started when this callback function returns. */
             ret = m_file_handle[0]->write(&user_data, sizeof(user_data));
@@ -2822,7 +2786,7 @@ TEST_F(TestMux, tx_callback_dispatch_triggered_tx_within_callback)
 
     MuxCallbackTest callback;
     obj.callback_attach(mbed::Callback<void(mbed::MuxBase::event_context_t &)>(&callback,
-                        &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
+                                                                               &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish a user channel. */
 
@@ -2838,8 +2802,7 @@ TEST_F(TestMux, tx_callback_dispatch_triggered_tx_within_callback)
     /* Program write cycle. */
     const uint8_t user_data     = 1u;
     const uint8_t dlci_id       = 1u;
-    const uint8_t write_byte[7] =
-    {
+    const uint8_t write_byte[7] = {
         FLAG_SEQUENCE_OCTET,
         3u | (dlci_id << 2),
         FRAME_TYPE_UIH,
@@ -2851,10 +2814,10 @@ TEST_F(TestMux, tx_callback_dispatch_triggered_tx_within_callback)
 
     FileWrite write(&(write_byte[0]), sizeof(write_byte), 1);
     EXPECT_CALL(m_fh_mock, write(NotNull(), sizeof(write_byte)))
-                .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
+    .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
     /* End TX cycle. */
     EXPECT_CALL(m_fh_mock, write(NotNull(), sizeof(write_byte) - sizeof(write_byte[0])))
-                .WillOnce(Return(0)).RetiresOnSaturation();
+    .WillOnce(Return(0)).RetiresOnSaturation();
 
     /* 1st write request accepted by the implementation. */
     ssize_t ret = (m_file_handle[0])->write(&user_data, sizeof(user_data));
@@ -2886,16 +2849,16 @@ static void tx_callback_dispatch_set_pending_multiple_times_for_same_dlci_only_1
 }
 
 
- /*
- * TC - Ensure proper behaviour when TX callback pending is set multiple times for same DLCI
- *
- * Test sequence:
- * - Issue write, which is accepted by the implementation for execution
- * - Issue 2 more write requests, which are not accepted by the implementation for execution
- *
- * Expected outcome:
- * -  Only 1 TX callback gets generated
- */
+/*
+* TC - Ensure proper behaviour when TX callback pending is set multiple times for same DLCI
+*
+* Test sequence:
+* - Issue write, which is accepted by the implementation for execution
+* - Issue 2 more write requests, which are not accepted by the implementation for execution
+*
+* Expected outcome:
+* -  Only 1 TX callback gets generated
+*/
 TEST_F(TestMux, tx_callback_dispatch_set_pending_multiple_times_for_same_dlci_only_1_callback_generated)
 {
     m_user_tx_callback_set_pending_multiple_times_for_same_dlci_only_1_callback_generated_value = 0;
@@ -2916,7 +2879,7 @@ TEST_F(TestMux, tx_callback_dispatch_set_pending_multiple_times_for_same_dlci_on
 
     MuxCallbackTest callback;
     obj.callback_attach(mbed::Callback<void(mbed::MuxBase::event_context_t &)>(&callback,
-                        &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
+                                                                               &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish a user channel. */
 
@@ -2932,8 +2895,7 @@ TEST_F(TestMux, tx_callback_dispatch_set_pending_multiple_times_for_same_dlci_on
     /* Program write cycle. */
     const uint8_t user_data     = 1u;
     const uint8_t dlci_id       = 1u;
-    const uint8_t write_byte[7] =
-    {
+    const uint8_t write_byte[7] = {
         FLAG_SEQUENCE_OCTET,
         3u | (dlci_id << 2),
         FRAME_TYPE_UIH,
@@ -2944,10 +2906,10 @@ TEST_F(TestMux, tx_callback_dispatch_set_pending_multiple_times_for_same_dlci_on
     };
     FileWrite write(&(write_byte[0]), sizeof(write_byte), 1);
     EXPECT_CALL(fh_mock, write(NotNull(), sizeof(write_byte)))
-                .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
+    .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
     /* End TX cycle. */
     EXPECT_CALL(fh_mock, write(NotNull(), sizeof(write_byte) - sizeof(write_byte[0])))
-                .WillOnce(Return(0)).RetiresOnSaturation();
+    .WillOnce(Return(0)).RetiresOnSaturation();
 
     /* 1st write request accepted by the implementation. */
     ssize_t ret = (m_file_handle[0])->write(&user_data, sizeof(user_data));
@@ -2984,12 +2946,12 @@ static void tx_callback_dispatch_set_pending_for_all_dlcis_tx_callback()
     ++m_user_tx_callback_set_pending_for_all_dlcis_check_value;
 }
 
- /*
- * TC - Ensure proper behaviour when all all channels have TX callback pending
- *
- * Expected outcome:
- * - Correct amount of callbacks executed
- */
+/*
+* TC - Ensure proper behaviour when all all channels have TX callback pending
+*
+* Expected outcome:
+* - Correct amount of callbacks executed
+*/
 TEST_F(TestMux, tx_callback_dispatch_set_pending_for_all_dlcis)
 {
     m_user_tx_callback_set_pending_for_all_dlcis_check_value = 0;
@@ -3010,7 +2972,7 @@ TEST_F(TestMux, tx_callback_dispatch_set_pending_for_all_dlcis)
 
     MuxCallbackTest callback;
     obj.callback_attach(mbed::Callback<void(mbed::MuxBase::event_context_t &)>(&callback,
-                        &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
+                                                                               &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish a user channel. */
 
@@ -3025,7 +2987,7 @@ TEST_F(TestMux, tx_callback_dispatch_set_pending_for_all_dlcis)
 
     /* Create max amount of DLCIs and collect the handles */
     uint8_t dlci_id = DLCI_ID_LOWER_BOUND + 1u;
-    for (uint8_t i = 1u; i!= MAX_DLCI_COUNT; ++i) {
+    for (uint8_t i = 1u; i != MAX_DLCI_COUNT; ++i) {
         channel_open(dlci_id, callback, ENQUEUE_DEFERRED_CALL_YES, STOP_RX_CYCLE_YES, obj, fh_mock, sig_io);
 
         /* Validate Filehandle generation. */
@@ -3045,8 +3007,7 @@ TEST_F(TestMux, tx_callback_dispatch_set_pending_for_all_dlcis)
     /* Program write cycle. */
     dlci_id                     = DLCI_ID_LOWER_BOUND;
     const uint8_t user_data     = 1u;
-    const uint8_t write_byte[7] =
-    {
+    const uint8_t write_byte[7] = {
         FLAG_SEQUENCE_OCTET,
         3u | (dlci_id << 2),
         FRAME_TYPE_UIH,
@@ -3058,17 +3019,17 @@ TEST_F(TestMux, tx_callback_dispatch_set_pending_for_all_dlcis)
 
     FileWrite write(&(write_byte[0]), sizeof(write_byte), 1);
     EXPECT_CALL(fh_mock, write(NotNull(), sizeof(write_byte)))
-                .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
+    .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
     /* End TX cycle. */
     EXPECT_CALL(fh_mock, write(NotNull(), sizeof(write_byte) - sizeof(write_byte[0])))
-                .WillOnce(Return(0)).RetiresOnSaturation();
+    .WillOnce(Return(0)).RetiresOnSaturation();
 
     /* 1st write request accepted by the implementation. */
     ssize_t write_ret = (m_file_handle[0])->write(&user_data, sizeof(user_data));
     EXPECT_EQ(sizeof(user_data), write_ret);
 
     /* TX cycle in progress, all further write request will fail. */
-    for (uint8_t i = 0; i!= MAX_DLCI_COUNT; ++i) {
+    for (uint8_t i = 0; i != MAX_DLCI_COUNT; ++i) {
         ssize_t write_ret = (m_file_handle[i])->write(&user_data, sizeof(user_data));
         EXPECT_EQ(-EAGAIN, write_ret);
     }
@@ -3092,8 +3053,7 @@ static void tx_callback_dispatch_rollover_tx_pending_bitmask_tx_callback()
 
         static const uint8_t user_data = 2u;
         /* Needs to be static as referenced after this function returns. */
-        static const uint8_t write_byte[7] =
-        {
+        static const uint8_t write_byte[7] = {
             FLAG_SEQUENCE_OCTET,
             3u | (DLCI_ID_LOWER_BOUND << 2),
             FRAME_TYPE_UIH,
@@ -3106,7 +3066,7 @@ static void tx_callback_dispatch_rollover_tx_pending_bitmask_tx_callback()
            loop. */
         static FileWrite write(&(write_byte[0]), sizeof(write_byte), sizeof(write_byte));
         EXPECT_CALL(m_fh_mock, write(NotNull(), sizeof(write_byte)))
-                    .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
+        .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
 
         /* 1st write request accepted by the implementation: TX cycle not finished. */
         ssize_t write_ret = (m_file_handle[0])->write(&user_data, sizeof(user_data));
@@ -3148,7 +3108,7 @@ TEST_F(TestMux, tx_callback_dispatch_rollover_tx_pending_bitmask)
 
     MuxCallbackTest callback;
     obj.callback_attach(mbed::Callback<void(mbed::MuxBase::event_context_t &)>(&callback,
-                        &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
+                                                                               &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish a user channel. */
 
@@ -3163,7 +3123,7 @@ TEST_F(TestMux, tx_callback_dispatch_rollover_tx_pending_bitmask)
 
     /* Create max amount of DLCIs and collect the handles */
     uint8_t dlci_id = DLCI_ID_LOWER_BOUND + 1u;
-    for (uint8_t i = 1u; i!= MAX_DLCI_COUNT; ++i) {
+    for (uint8_t i = 1u; i != MAX_DLCI_COUNT; ++i) {
         channel_open(dlci_id, callback, ENQUEUE_DEFERRED_CALL_YES, STOP_RX_CYCLE_YES, obj, m_fh_mock, sig_io);
 
         /* Validate Filehandle generation. */
@@ -3179,8 +3139,7 @@ TEST_F(TestMux, tx_callback_dispatch_rollover_tx_pending_bitmask)
     /* Start write cycle for the 1st DLCI. */
     dlci_id                     = DLCI_ID_LOWER_BOUND;
     const uint8_t user_data     = 1u;
-    const uint8_t write_byte[7] =
-    {
+    const uint8_t write_byte[7] = {
         FLAG_SEQUENCE_OCTET,
         3u | (dlci_id << 2),
         FRAME_TYPE_UIH,
@@ -3191,17 +3150,17 @@ TEST_F(TestMux, tx_callback_dispatch_rollover_tx_pending_bitmask)
     };
     FileWrite write(&(write_byte[0]), sizeof(write_byte), 1);
     EXPECT_CALL(m_fh_mock, write(NotNull(), sizeof(write_byte)))
-                .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
+    .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
     /* End TX cycle. */
     EXPECT_CALL(m_fh_mock, write(NotNull(), sizeof(write_byte) - sizeof(write_byte[0])))
-                .WillOnce(Return(0)).RetiresOnSaturation();
+    .WillOnce(Return(0)).RetiresOnSaturation();
 
     /* 1st write request accepted by the implementation: TX cycle not finished. */
     ssize_t write_ret = (m_file_handle[0])->write(&user_data, sizeof(user_data));
     EXPECT_EQ(sizeof(user_data), write_ret);
 
     /* TX cycle in progress, set TX pending bit for all established DLCIs. */
-    for (uint8_t i = 0; i!= MAX_DLCI_COUNT; ++i) {
+    for (uint8_t i = 0; i != MAX_DLCI_COUNT; ++i) {
         write_ret = (m_file_handle[i])->write(&user_data, sizeof(user_data));
         EXPECT_EQ(-EAGAIN, write_ret);
     }
@@ -3211,7 +3170,7 @@ TEST_F(TestMux, tx_callback_dispatch_rollover_tx_pending_bitmask)
     single_complete_write_cycle(&(write_byte[1]), (sizeof(write_byte) - sizeof(write_byte[0])), NULL, m_fh_mock, sig_io);
 
     /* Validate proper TX callback callcount. */
-    EXPECT_EQ((MAX_DLCI_COUNT +1u), m_user_tx_callback_rollover_tx_pending_bitmask_check_value);
+    EXPECT_EQ((MAX_DLCI_COUNT + 1u), m_user_tx_callback_rollover_tx_pending_bitmask_check_value);
 
     /* End sequence: Complete the 1st write, which triggers the pending TX callback. */
 }
@@ -3222,10 +3181,9 @@ static void tx_callback_dispatch_tx_to_different_dlci_tx_callback()
 {
     static const uint8_t user_data     = 2u;
     /* Needs to be static as referenced after this function returns. */
-    static const uint8_t write_byte[7] =
-    {
+    static const uint8_t write_byte[7] = {
         FLAG_SEQUENCE_OCTET,
-        3u | ((DLCI_ID_LOWER_BOUND +1u) << 2),
+        3u | ((DLCI_ID_LOWER_BOUND + 1u) << 2),
         FRAME_TYPE_UIH,
         LENGTH_INDICATOR_OCTET | (sizeof(user_data) << 1),
         user_data,
@@ -3235,7 +3193,7 @@ static void tx_callback_dispatch_tx_to_different_dlci_tx_callback()
     static FileWrite write(&(write_byte[0]), sizeof(write_byte), sizeof(write_byte));
 
     switch (m_user_tx_callback_tx_to_different_dlci_check_value) {
-        ssize_t write_ret;
+            ssize_t write_ret;
         case 0:
             /* Current context is TX callback for the 1st handle. */
 
@@ -3244,7 +3202,7 @@ static void tx_callback_dispatch_tx_to_different_dlci_tx_callback()
             /* Write all in a 1 write request, which will guarantee callback processing continues within current
              * disptach loop. */
             EXPECT_CALL(m_fh_mock, write(NotNull(), sizeof(write_byte)))
-                        .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
+            .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
 
             /* Start TX to 2nd handle. */
             write_ret = (m_file_handle[1])->write(&user_data, sizeof(user_data));
@@ -3299,7 +3257,7 @@ TEST_F(TestMux, tx_callback_dispatch_tx_to_different_dlci_within_current_context
 
     MuxCallbackTest callback;
     obj.callback_attach(mbed::Callback<void(mbed::MuxBase::event_context_t &)>(&callback,
-                        &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
+                                                                               &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish a user channel. */
 
@@ -3327,8 +3285,7 @@ TEST_F(TestMux, tx_callback_dispatch_tx_to_different_dlci_within_current_context
     /* Start write cycle for the 1st DLCI. */
     dlci_id                     = DLCI_ID_LOWER_BOUND;
     const uint8_t user_data     = 1u;
-    const uint8_t write_byte[7] =
-    {
+    const uint8_t write_byte[7] = {
         FLAG_SEQUENCE_OCTET,
         3u | (dlci_id << 2),
         FRAME_TYPE_UIH,
@@ -3339,17 +3296,17 @@ TEST_F(TestMux, tx_callback_dispatch_tx_to_different_dlci_within_current_context
     };
     FileWrite write(&(write_byte[0]), sizeof(write_byte), 1);
     EXPECT_CALL(m_fh_mock, write(NotNull(), sizeof(write_byte)))
-                .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
+    .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
     /* End TX cycle. */
     EXPECT_CALL(m_fh_mock, write(NotNull(), sizeof(write_byte) - sizeof(write_byte[0])))
-                .WillOnce(Return(0)).RetiresOnSaturation();
+    .WillOnce(Return(0)).RetiresOnSaturation();
 
     /* 1st write request accepted by the implementation: TX cycle not finished. */
     ssize_t write_ret = (m_file_handle[0])->write(&user_data, sizeof(user_data));
     EXPECT_EQ(sizeof(user_data), write_ret);
 
     /* TX cycle in progress, set TX pending bit for all established DLCIs. */
-    for (uint8_t i = 0; i!= 2u; ++i) {
+    for (uint8_t i = 0; i != 2u; ++i) {
         write_ret = (m_file_handle[i])->write(&user_data, sizeof(user_data));
         EXPECT_EQ(-EAGAIN, write_ret);
     }
@@ -3371,7 +3328,7 @@ static void tx_callback_dispatch_tx_to_different_dlci_not_within_current_context
 
     /* Needs to be static as referenced after this function returns. */
     m_write_byte[0] = FLAG_SEQUENCE_OCTET;
-    m_write_byte[1] = 3u | ((DLCI_ID_LOWER_BOUND +1u) << 2);
+    m_write_byte[1] = 3u | ((DLCI_ID_LOWER_BOUND + 1u) << 2);
     m_write_byte[2] = FRAME_TYPE_UIH;
     m_write_byte[3] = LENGTH_INDICATOR_OCTET | (sizeof(user_data) << 1);
     m_write_byte[4] = user_data;
@@ -3381,17 +3338,17 @@ static void tx_callback_dispatch_tx_to_different_dlci_not_within_current_context
     static FileWrite write(&(m_write_byte[0]), sizeof(m_write_byte), 1);
 
     switch (m_user_tx_callback_tx_to_different_dlci_not_within_current_context_check_value) {
-        ssize_t  write_ret;
+            ssize_t  write_ret;
         case 0:
             /* Current context is TX callback for the 1st handle. */
 
             ++m_user_tx_callback_tx_to_different_dlci_not_within_current_context_check_value;
 
             EXPECT_CALL(m_fh_mock, write(NotNull(), sizeof(m_write_byte)))
-                        .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
+            .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
             /* End TX cycle. */
             EXPECT_CALL(m_fh_mock, write(NotNull(), sizeof(m_write_byte) - sizeof(m_write_byte[0])))
-                        .WillOnce(Return(0)).RetiresOnSaturation();
+            .WillOnce(Return(0)).RetiresOnSaturation();
 
             /* Start TX to 2nd handle: TX cycle not finished within the current context. */
             write_ret = (m_file_handle[1])->write(&user_data, sizeof(user_data));
@@ -3447,7 +3404,7 @@ TEST_F(TestMux, tx_callback_dispatch_tx_to_different_dlci_not_within_current_con
 
     MuxCallbackTest callback;
     obj.callback_attach(mbed::Callback<void(mbed::MuxBase::event_context_t &)>(&callback,
-                        &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
+                                                                               &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish a user channel. */
 
@@ -3475,8 +3432,7 @@ TEST_F(TestMux, tx_callback_dispatch_tx_to_different_dlci_not_within_current_con
     /* Start write cycle for the 1st DLCI. */
     dlci_id                     = DLCI_ID_LOWER_BOUND;
     const uint8_t user_data     = 1u;
-    const uint8_t write_byte[7] =
-    {
+    const uint8_t write_byte[7] = {
         FLAG_SEQUENCE_OCTET,
         3u | (dlci_id << 2),
         FRAME_TYPE_UIH,
@@ -3487,17 +3443,17 @@ TEST_F(TestMux, tx_callback_dispatch_tx_to_different_dlci_not_within_current_con
     };
     FileWrite write(&(write_byte[0]), sizeof(write_byte), 1);
     EXPECT_CALL(m_fh_mock, write(NotNull(), sizeof(write_byte)))
-                .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
+    .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
     /* End TX cycle. */
     EXPECT_CALL(m_fh_mock, write(NotNull(), sizeof(write_byte) - sizeof(write_byte[0])))
-                .WillOnce(Return(0)).RetiresOnSaturation();
+    .WillOnce(Return(0)).RetiresOnSaturation();
 
     /* 1st write request accepted by the implementation: TX cycle not finished. */
     ssize_t write_ret = (m_file_handle[0])->write(&user_data, sizeof(user_data));
     EXPECT_EQ(sizeof(user_data), write_ret);
 
     /* TX cycle in progress, set TX pending bit for all established DLCIs. */
-    for (uint8_t i = 0; i!= 2u; ++i) {
+    for (uint8_t i = 0; i != 2u; ++i) {
         write_ret = (m_file_handle[i])->write(&user_data, sizeof(user_data));
         EXPECT_EQ(-EAGAIN, write_ret);
     }
@@ -3521,8 +3477,7 @@ TEST_F(TestMux, tx_callback_dispatch_tx_to_different_dlci_not_within_current_con
 }
 
 
-typedef enum
-{
+typedef enum {
     RESUME_RX_CYCLE = 0,
     SUSPEND_RX_CYCLE
 } RxCycleContinueType;
@@ -3549,14 +3504,14 @@ void single_complete_read_cycle(const uint8_t          *read_byte,
 
     FileRead read_1(&(read_byte[rx_count]), FRAME_HEADER_READ_LEN, FRAME_HEADER_READ_LEN);
     EXPECT_CALL(fh, read(NotNull(), FRAME_HEADER_READ_LEN))
-                .WillOnce(Invoke(&read_1, &FileRead::read)).RetiresOnSaturation();
+    .WillOnce(Invoke(&read_1, &FileRead::read)).RetiresOnSaturation();
 
     /* Phase 2: read remainder of the frame. */
     rx_count += FRAME_HEADER_READ_LEN;
 
     FileRead read_2(&(read_byte[rx_count]), (length - rx_count), (length - rx_count));
     EXPECT_CALL(fh, read(NotNull(), (length - rx_count)))
-                .WillOnce(Invoke(&read_2, &FileRead::read)).RetiresOnSaturation();
+    .WillOnce(Invoke(&read_2, &FileRead::read)).RetiresOnSaturation();
 
     /* Verify internal logic. */
     rx_count += (length - rx_count);
@@ -3572,7 +3527,7 @@ void single_complete_read_cycle(const uint8_t          *read_byte,
 
         FileWrite write(&(tx_frame[0]), tx_frame_length, 0);
         EXPECT_CALL(fh, write(NotNull(), tx_frame_length))
-                    .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
+        .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
     }
 
     /* Trigger deferred call to execute the programmed mocks above. */
@@ -3615,7 +3570,7 @@ TEST_F(TestMux, user_rx_0_length_user_payload)
 
     MuxCallbackTest callback;
     obj.callback_attach(mbed::Callback<void(mbed::MuxBase::event_context_t &)>(&callback,
-                        &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
+                                                                               &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish a user channel. */
 
@@ -3629,8 +3584,7 @@ TEST_F(TestMux, user_rx_0_length_user_payload)
     m_file_handle[0]->sigio(user_rx_0_length_user_payload_callback);
 
     /* Start read cycle for the DLCI. */
-    const uint8_t read_byte[5] =
-    {
+    const uint8_t read_byte[5] = {
         1u | (DLCI_ID_LOWER_BOUND << 2),
         FRAME_TYPE_UIH,
         LENGTH_INDICATOR_OCTET,
@@ -3709,7 +3663,7 @@ TEST_F(TestMux, user_rx_single_read)
 
     MuxCallbackTest callback;
     obj.callback_attach(mbed::Callback<void(mbed::MuxBase::event_context_t &)>(&callback,
-                        &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
+                                                                               &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish a user channel. */
 
@@ -3724,8 +3678,7 @@ TEST_F(TestMux, user_rx_single_read)
 
     /* Start read cycle for the DLCI. */
     const uint8_t user_data    = 0xA5u;
-    const uint8_t read_byte[6] =
-    {
+    const uint8_t read_byte[6] = {
         1u | (DLCI_ID_LOWER_BOUND << 2),
         FRAME_TYPE_UIH,
         LENGTH_INDICATOR_OCTET | (sizeof(user_data) << 1),
@@ -3784,7 +3737,7 @@ TEST_F(TestMux, user_rx_single_read_no_data_available)
 
     MuxCallbackTest callback;
     obj.callback_attach(mbed::Callback<void(mbed::MuxBase::event_context_t &)>(&callback,
-                        &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
+                                                                               &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish a user channel. */
 
@@ -3847,7 +3800,7 @@ TEST_F(TestMux, user_rx_rx_suspend_rx_resume_cycle)
 
     MuxCallbackTest callback;
     obj.callback_attach(mbed::Callback<void(mbed::MuxBase::event_context_t &)>(&callback,
-                        &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
+                                                                               &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish a user channel. */
 
@@ -3862,8 +3815,7 @@ TEST_F(TestMux, user_rx_rx_suspend_rx_resume_cycle)
 
     /* Start 1st read cycle for the DLCI. */
     uint8_t user_data    = 0xA5u;
-    uint8_t read_byte[6] =
-    {
+    uint8_t read_byte[6] = {
         1u | (DLCI_ID_LOWER_BOUND << 2),
         FRAME_TYPE_UIH,
         LENGTH_INDICATOR_OCTET | (sizeof(user_data) << 1),
@@ -3881,7 +3833,7 @@ TEST_F(TestMux, user_rx_rx_suspend_rx_resume_cycle)
                                sig_io);
 
     /* Validate proper callback callcount. */
-    EXPECT_EQ(1, m_user_rx_rx_suspend_rx_resume_cycle_check_value );
+    EXPECT_EQ(1, m_user_rx_rx_suspend_rx_resume_cycle_check_value);
 
     /* Start 2nd Rx/Tx cycle, which omits the Rx part as Rx prcossing has been suspended by reception of valid user
        data frame above. Tx is omitted as there is no data in the Tx buffer. */
@@ -3915,7 +3867,7 @@ TEST_F(TestMux, user_rx_rx_suspend_rx_resume_cycle)
                                sig_io);
 
     /* Validate proper callback callcount. */
-    EXPECT_EQ(2, m_user_rx_rx_suspend_rx_resume_cycle_check_value );
+    EXPECT_EQ(2, m_user_rx_rx_suspend_rx_resume_cycle_check_value);
 
     /* Start 2nd Rx/Tx cycle, which omits the Rx part as Rx processing has been suspended by reception of valid user
        data frame above. Tx is omitted as there is no data in the Tx buffer. */
@@ -3974,7 +3926,7 @@ TEST_F(TestMux, user_rx_read_1_byte_per_run_context)
 
     MuxCallbackTest callback;
     obj.callback_attach(mbed::Callback<void(mbed::MuxBase::event_context_t &)>(&callback,
-                        &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
+                                                                               &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish a user channel. */
 
@@ -3989,8 +3941,7 @@ TEST_F(TestMux, user_rx_read_1_byte_per_run_context)
 
     /* Start read cycle for the DLCI. */
     const uint8_t user_data    = 0xA5u;
-    const uint8_t read_byte[6] =
-    {
+    const uint8_t read_byte[6] = {
         1u | (DLCI_ID_LOWER_BOUND << 2),
         FRAME_TYPE_UIH,
         LENGTH_INDICATOR_OCTET | (sizeof(user_data) << 1),
@@ -4051,7 +4002,7 @@ TEST_F(TestMux, user_rx_read_max_size_user_payload_in_1_read_call)
 
     MuxCallbackTest callback;
     obj.callback_attach(mbed::Callback<void(mbed::MuxBase::event_context_t &)>(&callback,
-                        &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
+                                                                               &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish a user channel. */
 
@@ -4138,7 +4089,7 @@ TEST_F(TestMux, user_rx_read_1_byte_per_read_call_max_size_user_payload_availabl
 
     MuxCallbackTest callback;
     obj.callback_attach(mbed::Callback<void(mbed::MuxBase::event_context_t &)>(&callback,
-                        &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
+                                                                               &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish a user channel. */
 
@@ -4238,7 +4189,7 @@ TEST_F(TestMux, user_rx_dlci_not_established)
 
     MuxCallbackTest callback;
     obj.callback_attach(mbed::Callback<void(mbed::MuxBase::event_context_t &)>(&callback,
-                        &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
+                                                                               &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish a user channel. */
 
@@ -4253,8 +4204,7 @@ TEST_F(TestMux, user_rx_dlci_not_established)
 
     uint8_t dlci_id      = DLCI_ID_LOWER_BOUND + 1u;
     uint8_t user_data    = 0xA5u;
-    uint8_t read_byte[6] =
-    {
+    uint8_t read_byte[6] = {
         1u | (dlci_id << 2),
         FRAME_TYPE_UIH,
         LENGTH_INDICATOR_OCTET | (sizeof(user_data) << 1),
@@ -4370,12 +4320,11 @@ TEST_F(TestMux, user_rx_invalidate_dlci_id_used)
 
     MuxCallbackTest callback;
     obj.callback_attach(mbed::Callback<void(mbed::MuxBase::event_context_t &)>(&callback,
-                        &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
+                                                                               &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Send multiplexer open request within the call context. */
 
-    const uint8_t write_byte_mux_open[6] =
-    {
+    const uint8_t write_byte_mux_open[6] = {
         FLAG_SEQUENCE_OCTET,
         ADDRESS_MUX_START_REQ_OCTET,
         (FRAME_TYPE_SABM | PF_BIT),
@@ -4385,7 +4334,7 @@ TEST_F(TestMux, user_rx_invalidate_dlci_id_used)
     };
     FileWrite write(&(write_byte_mux_open[0]), sizeof(write_byte_mux_open), sizeof(write_byte_mux_open));
     EXPECT_CALL(fh_mock, write(NotNull(), sizeof(write_byte_mux_open)))
-                .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
+    .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
 
     /* Start frame write sequence gets completed, now start T1 timer. */
     mbed_equeue_stub::call_in_expect(T1_TIMER_VALUE, 1);
@@ -4395,8 +4344,7 @@ TEST_F(TestMux, user_rx_invalidate_dlci_id_used)
 
     /* Receive multiplexer open response, and start TX of open user channel request. */
 
-    const uint8_t read_byte_mux_open[6] =
-    {
+    const uint8_t read_byte_mux_open[6] = {
         FLAG_SEQUENCE_OCTET,
         ADDRESS_MUX_START_RESP_OCTET,
         (FRAME_TYPE_UA | PF_BIT),
@@ -4405,8 +4353,7 @@ TEST_F(TestMux, user_rx_invalidate_dlci_id_used)
         FLAG_SEQUENCE_OCTET
     };
     uint8_t dlci_id                          = (3u) | (1u << 2);
-    const uint8_t write_byte_channel_open[6] =
-    {
+    const uint8_t write_byte_channel_open[6] = {
         FLAG_SEQUENCE_OCTET,
         dlci_id,
         (FRAME_TYPE_SABM | PF_BIT),
@@ -4427,8 +4374,7 @@ TEST_F(TestMux, user_rx_invalidate_dlci_id_used)
 
     const uint8_t user_data = 0xA5u;
     dlci_id                 = DLCI_INVALID_ID;
-    uint8_t read_byte[6]    =
-    {
+    uint8_t read_byte[6]    = {
         1u | (dlci_id << 2),
         FRAME_TYPE_UIH,
         LENGTH_INDICATOR_OCTET | (sizeof(user_data) << 1),
@@ -4451,8 +4397,7 @@ TEST_F(TestMux, user_rx_invalidate_dlci_id_used)
     self_iniated_request_tx(&write_byte_channel_open[1], (SABM_FRAME_LEN - 1u), FRAME_HEADER_READ_LEN, fh_mock, sig_io);
     /* Read the channel open response frame. */
     callback.callback_arm();
-    const uint8_t read_byte_channel_open[5] =
-    {
+    const uint8_t read_byte_channel_open[5] = {
         (3u | (1u << 2)),
         (FRAME_TYPE_UA | PF_BIT),
         LENGTH_INDICATOR_OCTET,
@@ -4562,7 +4507,7 @@ TEST_F(TestMux, user_rx_invalid_fcs)
 
     MuxCallbackTest callback;
     obj.callback_attach(mbed::Callback<void(mbed::MuxBase::event_context_t &)>(&callback,
-                        &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
+                                                                               &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish a user channel. */
 
@@ -4580,8 +4525,7 @@ TEST_F(TestMux, user_rx_invalid_fcs)
     /* Rx user data frame with invalid FCS: silently discarded by the implementation. */
     const uint8_t dlci_id   = DLCI_ID_LOWER_BOUND;
     const uint8_t user_data = 0xA5u;
-    uint8_t read_byte[6]    =
-    {
+    uint8_t read_byte[6]    = {
         1u | (dlci_id << 2),
         FRAME_TYPE_UIH,
         LENGTH_INDICATOR_OCTET | (sizeof(user_data) << 1),
@@ -4671,7 +4615,7 @@ TEST_F(TestMux, rx_frame_type_not_supported)
 
     MuxCallbackTest callback;
     obj.callback_attach(mbed::Callback<void(mbed::MuxBase::event_context_t &)>(&callback,
-                        &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
+                                                                               &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish a user channel. */
 
@@ -4689,8 +4633,7 @@ TEST_F(TestMux, rx_frame_type_not_supported)
     /* Rx frame with invalid frame type ID: silently discarded by the implementation. */
     const uint8_t user_data = 0xA5u;
     const uint8_t dlci_id   = DLCI_ID_LOWER_BOUND;
-    uint8_t read_byte[6]    =
-    {
+    uint8_t read_byte[6]    = {
         1u | (dlci_id << 2),
         FRAME_TYPE_UNSUPPORTED,
         LENGTH_INDICATOR_OCTET | (sizeof(user_data) << 1),
@@ -4770,7 +4713,7 @@ TEST_F(TestMux, rx_frame_type_ua_when_no_sabm_send)
 
     MuxCallbackTest callback;
     obj.callback_attach(mbed::Callback<void(mbed::MuxBase::event_context_t &)>(&callback,
-                        &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
+                                                                               &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish a user channel. */
 
@@ -4786,8 +4729,7 @@ TEST_F(TestMux, rx_frame_type_ua_when_no_sabm_send)
     /* Rx frame type UA received, without pending SABM frame, to the established DLCI: silently discarded by the
        implementation. */
     const uint8_t dlci_id      = DLCI_ID_LOWER_BOUND;
-    const uint8_t read_byte[5] =
-    {
+    const uint8_t read_byte[5] = {
         3u | (dlci_id << 2),
         (FRAME_TYPE_UA | PF_BIT),
         LENGTH_INDICATOR_OCTET,
@@ -4845,7 +4787,7 @@ TEST_F(TestMux, rx_frame_type_dm_when_no_sabm_send)
 
     MuxCallbackTest callback;
     obj.callback_attach(mbed::Callback<void(mbed::MuxBase::event_context_t &)>(&callback,
-                        &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
+                                                                               &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish a user channel. */
 
@@ -4861,8 +4803,7 @@ TEST_F(TestMux, rx_frame_type_dm_when_no_sabm_send)
     /* Rx frame type DM received, without pending SABM frame, to the established DLCI: silently discarded by the
        implementation. */
     const uint8_t dlci_id      = DLCI_ID_LOWER_BOUND;
-    const uint8_t read_byte[5] =
-    {
+    const uint8_t read_byte[5] = {
         3u | (dlci_id << 2),
         (FRAME_TYPE_DM | PF_BIT),
         LENGTH_INDICATOR_OCTET,
@@ -4922,10 +4863,9 @@ TEST_F(TestMux, rx_frame_type_ua_invalid_cr_and_pf_bit)
 
     MuxCallbackTest callback;
     obj.callback_attach(mbed::Callback<void(mbed::MuxBase::event_context_t &)>(&callback,
-                        &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
+                                                                               &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
 
-    const uint8_t write_byte_mux_open[6] =
-    {
+    const uint8_t write_byte_mux_open[6] = {
         FLAG_SEQUENCE_OCTET,
         ADDRESS_MUX_START_REQ_OCTET,
         (FRAME_TYPE_SABM | PF_BIT),
@@ -4935,7 +4875,7 @@ TEST_F(TestMux, rx_frame_type_ua_invalid_cr_and_pf_bit)
     };
     FileWrite write(&(write_byte_mux_open[0]), sizeof(write_byte_mux_open), sizeof(write_byte_mux_open));
     EXPECT_CALL(fh_mock, write(NotNull(), sizeof(write_byte_mux_open)))
-                .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
+    .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
 
     mbed_equeue_stub::call_in_expect(T1_TIMER_VALUE, 1);
 
@@ -4944,8 +4884,7 @@ TEST_F(TestMux, rx_frame_type_ua_invalid_cr_and_pf_bit)
     EXPECT_EQ(NSAPI_ERROR_OK, channel_open_err);
 
     /* Read the mux open response frame. */
-    const uint8_t read_byte_mux_open[6] =
-    {
+    const uint8_t read_byte_mux_open[6] = {
         FLAG_SEQUENCE_OCTET,
         ADDRESS_MUX_START_RESP_OCTET,
         (FRAME_TYPE_UA | PF_BIT),
@@ -4955,8 +4894,7 @@ TEST_F(TestMux, rx_frame_type_ua_invalid_cr_and_pf_bit)
     };
     /* Reception of the mux open response frame starts the channel creation procedure. */
     const uint32_t address                   = (3u) | (DLCI_ID_LOWER_BOUND << 2);
-    const uint8_t write_byte_channel_open[6] =
-    {
+    const uint8_t write_byte_channel_open[6] = {
         FLAG_SEQUENCE_OCTET,
         address,
         (FRAME_TYPE_SABM | PF_BIT),
@@ -4972,8 +4910,7 @@ TEST_F(TestMux, rx_frame_type_ua_invalid_cr_and_pf_bit)
 
     /* Rx frame type UA received with invalid C/R bit: silently discarded by the implementation. */
 
-    const uint8_t read_byte_invalid_cr_bit[5] =
-    {
+    const uint8_t read_byte_invalid_cr_bit[5] = {
         1u | (DLCI_ID_LOWER_BOUND << 2),
         (FRAME_TYPE_UA | PF_BIT),
         LENGTH_INDICATOR_OCTET,
@@ -4985,8 +4922,7 @@ TEST_F(TestMux, rx_frame_type_ua_invalid_cr_and_pf_bit)
 
     /* Rx frame type UA received with invalid P/F bit: silently discarded by the implementation. */
 
-    const uint8_t read_byte_invalid_pf_bit[5] =
-    {
+    const uint8_t read_byte_invalid_pf_bit[5] = {
         3u | (DLCI_ID_LOWER_BOUND << 2),
         FRAME_TYPE_UA,
         LENGTH_INDICATOR_OCTET,
@@ -4998,8 +4934,7 @@ TEST_F(TestMux, rx_frame_type_ua_invalid_cr_and_pf_bit)
 
     /* Rx frame type UA, whic is valid: DLCI established. */
 
-    const uint8_t read_byte_valid[5] =
-    {
+    const uint8_t read_byte_valid[5] = {
         3u | (DLCI_ID_LOWER_BOUND << 2),
         (FRAME_TYPE_UA | PF_BIT),
         LENGTH_INDICATOR_OCTET,
@@ -5067,7 +5002,7 @@ TEST_F(TestMux, rx_frame_type_uih_invalid_cr_and_pf_bit)
 
     MuxCallbackTest callback;
     obj.callback_attach(mbed::Callback<void(mbed::MuxBase::event_context_t &)>(&callback,
-                        &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
+                                                                               &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish a user channel. */
 
@@ -5084,8 +5019,7 @@ TEST_F(TestMux, rx_frame_type_uih_invalid_cr_and_pf_bit)
 
     const uint8_t user_data                   = 0xA5u;
     const uint8_t dlci_id                     = DLCI_ID_LOWER_BOUND;
-    const uint8_t read_byte_invalid_pf_bit[6] =
-    {
+    const uint8_t read_byte_invalid_pf_bit[6] = {
         1u | (dlci_id << 2),
         (FRAME_TYPE_UIH | PF_BIT),
         LENGTH_INDICATOR_OCTET | (sizeof(user_data) << 1),
@@ -5101,8 +5035,7 @@ TEST_F(TestMux, rx_frame_type_uih_invalid_cr_and_pf_bit)
 
     /* Rx user data frame with invalid C/R bit: silently discarded by the implementation. */
 
-    const uint8_t read_byte_invalid_cr_bit[6] =
-    {
+    const uint8_t read_byte_invalid_cr_bit[6] = {
         1u | CR_BIT | (dlci_id << 2),
         FRAME_TYPE_UIH,
         LENGTH_INDICATOR_OCTET | (sizeof(user_data) << 1),
@@ -5118,8 +5051,7 @@ TEST_F(TestMux, rx_frame_type_uih_invalid_cr_and_pf_bit)
 
     /* Valid Rx user data frame: accepted by the implementation. */
 
-    const uint8_t read_byte_valid[6] =
-    {
+    const uint8_t read_byte_valid[6] = {
         1u | (dlci_id << 2),
         FRAME_TYPE_UIH,
         LENGTH_INDICATOR_OCTET | (sizeof(user_data) << 1),
@@ -5179,10 +5111,9 @@ TEST_F(TestMux, rx_frame_type_dm_invalid_cr_and_pf_bit)
 
     MuxCallbackTest callback;
     obj.callback_attach(mbed::Callback<void(mbed::MuxBase::event_context_t &)>(&callback,
-                        &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
+                                                                               &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
 
-    const uint8_t write_byte_mux_open[6] =
-    {
+    const uint8_t write_byte_mux_open[6] = {
         FLAG_SEQUENCE_OCTET,
         ADDRESS_MUX_START_REQ_OCTET,
         (FRAME_TYPE_SABM | PF_BIT),
@@ -5192,7 +5123,7 @@ TEST_F(TestMux, rx_frame_type_dm_invalid_cr_and_pf_bit)
     };
     FileWrite write(&(write_byte_mux_open[0]), sizeof(write_byte_mux_open), sizeof(write_byte_mux_open));
     EXPECT_CALL(fh_mock, write(NotNull(), sizeof(write_byte_mux_open)))
-                .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
+    .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
 
     mbed_equeue_stub::call_in_expect(T1_TIMER_VALUE, 1);
 
@@ -5201,8 +5132,7 @@ TEST_F(TestMux, rx_frame_type_dm_invalid_cr_and_pf_bit)
     EXPECT_EQ(NSAPI_ERROR_OK, channel_open_err);
 
     /* Read the mux open response frame. */
-    const uint8_t read_byte_mux_open[6] =
-    {
+    const uint8_t read_byte_mux_open[6] = {
         FLAG_SEQUENCE_OCTET,
         ADDRESS_MUX_START_RESP_OCTET,
         (FRAME_TYPE_UA | PF_BIT),
@@ -5212,8 +5142,7 @@ TEST_F(TestMux, rx_frame_type_dm_invalid_cr_and_pf_bit)
     };
     /* Reception of the mux open response frame starts the channel creation procedure. */
     const uint32_t address                   = (3u) | (DLCI_ID_LOWER_BOUND << 2);
-    const uint8_t write_byte_channel_open[6] =
-    {
+    const uint8_t write_byte_channel_open[6] = {
         FLAG_SEQUENCE_OCTET,
         address,
         (FRAME_TYPE_SABM | PF_BIT),
@@ -5228,8 +5157,7 @@ TEST_F(TestMux, rx_frame_type_dm_invalid_cr_and_pf_bit)
 
     /* Rx frame type DM received with invalid C/R bit: silently discarded by the implementation */
 
-    const uint8_t read_byte_invalid_cr_bit[5] =
-    {
+    const uint8_t read_byte_invalid_cr_bit[5] = {
         1u | (DLCI_ID_LOWER_BOUND << 2),
         (FRAME_TYPE_DM | PF_BIT),
         LENGTH_INDICATOR_OCTET,
@@ -5241,8 +5169,7 @@ TEST_F(TestMux, rx_frame_type_dm_invalid_cr_and_pf_bit)
 
     /* Rx frame type DM received with invalid P/F bit: silently discarded by the implementation. */
 
-    const uint8_t read_byte_invalid_pf_bit[5] =
-    {
+    const uint8_t read_byte_invalid_pf_bit[5] = {
         3u | (DLCI_ID_LOWER_BOUND << 2),
         FRAME_TYPE_DM,
         LENGTH_INDICATOR_OCTET,
@@ -5254,8 +5181,7 @@ TEST_F(TestMux, rx_frame_type_dm_invalid_cr_and_pf_bit)
 
     /* Valid Rx frame type DM received: starts expected processing within implementation */
 
-    const uint8_t read_byte_valid[5] =
-    {
+    const uint8_t read_byte_valid[5] = {
         3u | (DLCI_ID_LOWER_BOUND << 2),
         (FRAME_TYPE_DM | PF_BIT),
         LENGTH_INDICATOR_OCTET,
@@ -5314,7 +5240,7 @@ TEST_F(TestMux, rx_frame_type_disc_invalid_cr_and_pf_bit)
 
     MuxCallbackTest callback;
     obj.callback_attach(mbed::Callback<void(mbed::MuxBase::event_context_t &)>(&callback,
-                        &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
+                                                                               &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish a user channel. */
 
@@ -5327,8 +5253,7 @@ TEST_F(TestMux, rx_frame_type_disc_invalid_cr_and_pf_bit)
 
     /* DISC received to non established DLCI ID with invalid C/R bit: silently discarded by the implementation. */
 
-    const uint8_t read_byte_invalid_cr_bit[5] =
-    {
+    const uint8_t read_byte_invalid_cr_bit[5] = {
         1u | CR_BIT | ((DLCI_ID_LOWER_BOUND + 1u) << 2),
         (FRAME_TYPE_DISC | PF_BIT),
         LENGTH_INDICATOR_OCTET,
@@ -5345,8 +5270,7 @@ TEST_F(TestMux, rx_frame_type_disc_invalid_cr_and_pf_bit)
 
     /* DISC received to to non established DLCI ID with invalid P/F bit: silently discarded by the implementation. */
 
-    const uint8_t read_byte_invalid_pf_bit[5] =
-    {
+    const uint8_t read_byte_invalid_pf_bit[5] = {
         1u | ((DLCI_ID_LOWER_BOUND + 1u) << 2),
         FRAME_TYPE_DISC,
         LENGTH_INDICATOR_OCTET,
@@ -5363,16 +5287,14 @@ TEST_F(TestMux, rx_frame_type_disc_invalid_cr_and_pf_bit)
 
     /* Valid DISC received: starts expected processing within implementation. */
 
-    const uint8_t read_byte_valid[5] =
-    {
+    const uint8_t read_byte_valid[5] = {
         1u | ((DLCI_ID_LOWER_BOUND + 1u) << 2),
         (FRAME_TYPE_DISC | PF_BIT),
         LENGTH_INDICATOR_OCTET,
         fcs_calculate(&read_byte_valid[0], 3u),
         FLAG_SEQUENCE_OCTET
     };
-    const uint8_t write_byte[6] =
-    {
+    const uint8_t write_byte[6] = {
         FLAG_SEQUENCE_OCTET,
         1u | ((DLCI_ID_LOWER_BOUND + 1u) << 2),
         (FRAME_TYPE_DM | PF_BIT),
@@ -5419,7 +5341,7 @@ TEST_F(TestMux, rx_frame_type_disc_while_tx_in_progress)
 
     MuxCallbackTest callback;
     obj.callback_attach(mbed::Callback<void(mbed::MuxBase::event_context_t &)>(&callback,
-                        &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
+                                                                               &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish a user channel. */
 
@@ -5435,8 +5357,7 @@ TEST_F(TestMux, rx_frame_type_disc_while_tx_in_progress)
     /* Write user data to established DLCI: TX not finished. */
 
     const uint8_t user_data         = 0xA5u;
-    const uint8_t write_byte_uih[7] =
-    {
+    const uint8_t write_byte_uih[7] = {
         FLAG_SEQUENCE_OCTET,
         3u | (DLCI_ID_LOWER_BOUND << 2),
         FRAME_TYPE_UIH,
@@ -5447,18 +5368,17 @@ TEST_F(TestMux, rx_frame_type_disc_while_tx_in_progress)
     };
     FileWrite write(&(write_byte_uih[0]), sizeof(write_byte_uih), 1);
     EXPECT_CALL(fh_mock, write(NotNull(), sizeof(write_byte_uih)))
-                .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
+    .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
     /* End TX cycle. */
     EXPECT_CALL(fh_mock, write(NotNull(), sizeof(write_byte_uih) - sizeof(write_byte_uih[0])))
-                .WillOnce(Return(0)).RetiresOnSaturation();
+    .WillOnce(Return(0)).RetiresOnSaturation();
 
     const ssize_t write_ret = m_file_handle[0]->write(&user_data, sizeof(user_data));
     EXPECT_EQ(sizeof(user_data), write_ret);
 
     /* Valid DISC received: starts expected processing within implementation. */
 
-    const uint8_t read_byte[5] =
-    {
+    const uint8_t read_byte[5] = {
         1u | ((DLCI_ID_LOWER_BOUND + 1u) << 2),
         (FRAME_TYPE_DISC | PF_BIT),
         LENGTH_INDICATOR_OCTET,
@@ -5469,7 +5389,7 @@ TEST_F(TestMux, rx_frame_type_disc_while_tx_in_progress)
     peer_iniated_request_rx(&(read_byte[0]),
                             SKIP_FLAG_SEQUENCE_OCTET,
                             NULL,                   // No TX response frame within the RX cycle.
-                            &(write_byte_uih[1]),   // Continue current frame TX in the TX pipeline.
+                            & (write_byte_uih[1]),  // Continue current frame TX in the TX pipeline.
                             sizeof(write_byte_uih) - sizeof(write_byte_uih[0]),
                             fh_mock,
                             sig_io);
@@ -5506,10 +5426,9 @@ TEST_F(TestMux, rx_frame_type_ua_dlci_id_mismatch)
 
     MuxCallbackTest callback;
     obj.callback_attach(mbed::Callback<void(mbed::MuxBase::event_context_t &)>(&callback,
-                        &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
+                                                                               &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
 
-    const uint8_t write_byte_mux_open[6] =
-    {
+    const uint8_t write_byte_mux_open[6] = {
         FLAG_SEQUENCE_OCTET,
         ADDRESS_MUX_START_REQ_OCTET,
         (FRAME_TYPE_SABM | PF_BIT),
@@ -5519,7 +5438,7 @@ TEST_F(TestMux, rx_frame_type_ua_dlci_id_mismatch)
     };
     FileWrite write(&(write_byte_mux_open[0]), sizeof(write_byte_mux_open), sizeof(write_byte_mux_open));
     EXPECT_CALL(fh_mock, write(NotNull(), sizeof(write_byte_mux_open)))
-                .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
+    .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
 
     mbed_equeue_stub::call_in_expect(T1_TIMER_VALUE, 1);
 
@@ -5529,8 +5448,7 @@ TEST_F(TestMux, rx_frame_type_ua_dlci_id_mismatch)
 
     /* Receive UA frame which has a different DLCI ID than the SABM frame: silently discarded. */
 
-    const uint8_t read_byte_invalid_dlci_id[6] =
-    {
+    const uint8_t read_byte_invalid_dlci_id[6] = {
         FLAG_SEQUENCE_OCTET,
         (1u | CR_BIT | (DLCI_ID_LOWER_BOUND << 2)),
         (FRAME_TYPE_UA | PF_BIT),
@@ -5548,8 +5466,7 @@ TEST_F(TestMux, rx_frame_type_ua_dlci_id_mismatch)
 
     /* Receive valid UA frame: establishment success. */
 
-    const uint8_t read_byte[5] =
-    {
+    const uint8_t read_byte[5] = {
         (1u | CR_BIT),
         (FRAME_TYPE_UA | PF_BIT),
         LENGTH_INDICATOR_OCTET,
@@ -5558,8 +5475,7 @@ TEST_F(TestMux, rx_frame_type_ua_dlci_id_mismatch)
     };
     /* Reception of the mux open response frame starts the channel creation procedure. */
     const uint32_t address_1st_channel_open = (3u) | (1u << 2);
-    uint8_t write_byte_1st_channel_open[6]  =
-    {
+    uint8_t write_byte_1st_channel_open[6]  = {
         FLAG_SEQUENCE_OCTET,
         address_1st_channel_open,
         (FRAME_TYPE_SABM | PF_BIT),
@@ -5575,8 +5491,7 @@ TEST_F(TestMux, rx_frame_type_ua_dlci_id_mismatch)
 
     /* Read the channel open response frame. */
     callback.callback_arm();
-    const uint8_t read_byte_channel_open[5]  =
-    {
+    const uint8_t read_byte_channel_open[5]  = {
         (3u | (1u << 2)),
         (FRAME_TYPE_UA | PF_BIT),
         LENGTH_INDICATOR_OCTET,
@@ -5621,10 +5536,9 @@ TEST_F(TestMux, rx_frame_type_dm_dlci_id_mismatch)
 
     MuxCallbackTest callback;
     obj.callback_attach(mbed::Callback<void(mbed::MuxBase::event_context_t &)>(&callback,
-                        &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
+                                                                               &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
 
-    const uint8_t write_byte_mux_open[6] =
-    {
+    const uint8_t write_byte_mux_open[6] = {
         FLAG_SEQUENCE_OCTET,
         ADDRESS_MUX_START_REQ_OCTET,
         (FRAME_TYPE_SABM | PF_BIT),
@@ -5634,7 +5548,7 @@ TEST_F(TestMux, rx_frame_type_dm_dlci_id_mismatch)
     };
     FileWrite write(&(write_byte_mux_open[0]), sizeof(write_byte_mux_open), sizeof(write_byte_mux_open));
     EXPECT_CALL(fh_mock, write(NotNull(), sizeof(write_byte_mux_open)))
-                .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
+    .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
 
     mbed_equeue_stub::call_in_expect(T1_TIMER_VALUE, 1);
 
@@ -5644,8 +5558,7 @@ TEST_F(TestMux, rx_frame_type_dm_dlci_id_mismatch)
 
     /* Receive DM frame which has a different DLCI ID than the SABM frame: silently discarded. */
 
-    const uint8_t read_byte_invalid_dlci_id[6] =
-    {
+    const uint8_t read_byte_invalid_dlci_id[6] = {
         FLAG_SEQUENCE_OCTET,
         (1u | CR_BIT | (DLCI_ID_LOWER_BOUND << 2)),
         (FRAME_TYPE_DM | PF_BIT),
@@ -5663,8 +5576,7 @@ TEST_F(TestMux, rx_frame_type_dm_dlci_id_mismatch)
 
     /* Receive valid DM frame: establishment rejected. */
 
-    const uint8_t read_byte[5] =
-    {
+    const uint8_t read_byte[5] = {
         (1u | CR_BIT),
         (FRAME_TYPE_DM | PF_BIT),
         LENGTH_INDICATOR_OCTET,
@@ -5687,10 +5599,13 @@ class ChannelOpenInsideCallbackTest : public MuxCallbackTest {
 public:
 
     ChannelOpenInsideCallbackTest(mbed::Mux3GPP  &obj, MockFileHandle &fh) :
-                                  _completion_count(0), _fh(fh), _obj(obj) {};
+        _completion_count(0), _fh(fh), _obj(obj) {};
 
     virtual void channel_open_run(mbed::MuxBase::event_context_t &ev);
-    uint8_t completion_count_get() {return _completion_count;}
+    uint8_t completion_count_get()
+    {
+        return _completion_count;
+    }
 
 private:
 
@@ -5714,8 +5629,7 @@ void ChannelOpenInsideCallbackTest::channel_open_run(mbed::MuxBase::event_contex
 
         const uint32_t address                          = 3u | ((DLCI_ID_LOWER_BOUND + 1u) << 2);
         // @note: static needed as needs to be valid after function returns.
-        static const uint8_t write_byte_channel_open[6] =
-        {
+        static const uint8_t write_byte_channel_open[6] = {
             FLAG_SEQUENCE_OCTET,
             address,
             (FRAME_TYPE_SABM | PF_BIT),
@@ -5727,7 +5641,7 @@ void ChannelOpenInsideCallbackTest::channel_open_run(mbed::MuxBase::event_contex
                                sizeof(write_byte_channel_open),
                                sizeof(write_byte_channel_open));
         EXPECT_CALL(_fh, write(NotNull(), sizeof(write_byte_channel_open)))
-                    .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
+        .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
 
         mbed_equeue_stub::call_in_expect(T1_TIMER_VALUE, 1);
 
@@ -5770,7 +5684,7 @@ TEST_F(TestMux, channel_open_inside_the_channel_open_callback)
 
     ChannelOpenInsideCallbackTest callback(obj, fh_mock);
     obj.callback_attach(mbed::Callback<void(mbed::MuxBase::event_context_t &)>(&callback,
-                        &ChannelOpenInsideCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
+                                                                               &ChannelOpenInsideCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish a user channel. */
 
@@ -5778,8 +5692,7 @@ TEST_F(TestMux, channel_open_inside_the_channel_open_callback)
 
     /* Read the channel open response frame. */
     const uint32_t address                  = 3u | ((DLCI_ID_LOWER_BOUND + 1u) << 2);
-    const uint8_t read_byte_channel_open[5] =
-    {
+    const uint8_t read_byte_channel_open[5] = {
         address,
         (FRAME_TYPE_UA | PF_BIT),
         LENGTH_INDICATOR_OCTET,
@@ -5800,10 +5713,13 @@ class ChannelOpenInsideCallbackDmReceivedTest : public MuxCallbackTest {
 public:
 
     ChannelOpenInsideCallbackDmReceivedTest(mbed::Mux3GPP  &obj, MockFileHandle &fh) :
-                                            _completion_count(0), _fh(fh), _obj(obj) {};
+        _completion_count(0), _fh(fh), _obj(obj) {};
 
     virtual void channel_open_run(mbed::MuxBase::event_context_t &ev);
-    uint8_t completion_count_get() {return _completion_count;}
+    uint8_t completion_count_get()
+    {
+        return _completion_count;
+    }
 
 private:
 
@@ -5822,8 +5738,8 @@ void ChannelOpenInsideCallbackDmReceivedTest::channel_open_run(mbed::MuxBase::ev
     ++_completion_count;
 
     switch (_completion_count) {
-        uint32_t    address;
-        nsapi_error channel_open_err;
+            uint32_t    address;
+            nsapi_error channel_open_err;
         case 1:
             EXPECT_EQ(NULL, ev.data.fh);
 
@@ -5831,8 +5747,7 @@ void ChannelOpenInsideCallbackDmReceivedTest::channel_open_run(mbed::MuxBase::ev
 
             address                                         = 3u | (DLCI_ID_LOWER_BOUND << 2);
             // @note: static needed as needs to be valid after function returns.
-            static const uint8_t write_byte_channel_open[6] =
-            {
+            static const uint8_t write_byte_channel_open[6] = {
                 FLAG_SEQUENCE_OCTET,
                 address,
                 (FRAME_TYPE_SABM | PF_BIT),
@@ -5844,7 +5759,7 @@ void ChannelOpenInsideCallbackDmReceivedTest::channel_open_run(mbed::MuxBase::ev
                                    sizeof(write_byte_channel_open),
                                    sizeof(write_byte_channel_open));
             EXPECT_CALL(_fh, write(NotNull(), sizeof(write_byte_channel_open)))
-                        .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
+            .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
 
             mbed_equeue_stub::call_in_expect(T1_TIMER_VALUE, 1);
 
@@ -5897,7 +5812,7 @@ TEST_F(TestMux, channel_open_inside_the_channel_open_callback_dm_received)
 
     ChannelOpenInsideCallbackDmReceivedTest callback(obj, fh_mock);
     obj.callback_attach(mbed::Callback<void(mbed::MuxBase::event_context_t &)>(&callback,
-                        &ChannelOpenInsideCallbackDmReceivedTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
+                                                                               &ChannelOpenInsideCallbackDmReceivedTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish a user channel. */
 
@@ -5908,8 +5823,7 @@ TEST_F(TestMux, channel_open_inside_the_channel_open_callback_dm_received)
 
     /* Read the channel open response frame. */
     const uint32_t address                  = 3u | (DLCI_ID_LOWER_BOUND << 2);
-    const uint8_t read_byte_channel_open[5] =
-    {
+    const uint8_t read_byte_channel_open[5] = {
         address,
         (FRAME_TYPE_UA | PF_BIT),
         LENGTH_INDICATOR_OCTET,
@@ -5930,10 +5844,13 @@ class ChannelOpenInsideCallbackMuxOpenTimeoutTest : public MuxCallbackTest {
 public:
 
     ChannelOpenInsideCallbackMuxOpenTimeoutTest(mbed::Mux3GPP  &obj, MockFileHandle &fh) :
-                                                _completion_count(0), _fh(fh), _obj(obj) {};
+        _completion_count(0), _fh(fh), _obj(obj) {};
 
     virtual void channel_open_run(mbed::MuxBase::event_context_t &ev);
-    uint8_t completion_count_get() {return _completion_count;}
+    uint8_t completion_count_get()
+    {
+        return _completion_count;
+    }
 
 private:
 
@@ -5952,14 +5869,13 @@ void ChannelOpenInsideCallbackMuxOpenTimeoutTest::channel_open_run(mbed::MuxBase
     ++_completion_count;
 
     switch (_completion_count) {
-        nsapi_error channel_open_err;
+            nsapi_error channel_open_err;
         case 1:
             EXPECT_EQ(NULL, ev.data.fh);
             /* Program completion function to start new user channel establishment procedure upon return.*/
 
             // @note: static needed as needs to be valid after function returns.
-            static const uint8_t write_byte_mux_open[6] =
-            {
+            static const uint8_t write_byte_mux_open[6] = {
                 FLAG_SEQUENCE_OCTET,
                 ADDRESS_MUX_START_REQ_OCTET,
                 (FRAME_TYPE_SABM | PF_BIT),
@@ -5971,7 +5887,7 @@ void ChannelOpenInsideCallbackMuxOpenTimeoutTest::channel_open_run(mbed::MuxBase
                                    sizeof(write_byte_mux_open),
                                    sizeof(write_byte_mux_open));
             EXPECT_CALL(_fh, write(NotNull(), sizeof(write_byte_mux_open)))
-                        .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
+            .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
 
             mbed_equeue_stub::call_in_expect(T1_TIMER_VALUE, 1);
 
@@ -6022,11 +5938,10 @@ TEST_F(TestMux, channel_open_inside_the_channel_open_callback_mux_open_timeout)
 
     ChannelOpenInsideCallbackMuxOpenTimeoutTest callback(obj, fh_mock);
     obj.callback_attach(mbed::Callback<void(mbed::MuxBase::event_context_t &)>(&callback,
-                        &ChannelOpenInsideCallbackMuxOpenTimeoutTest::channel_open_run),
+                                                                               &ChannelOpenInsideCallbackMuxOpenTimeoutTest::channel_open_run),
                         mbed::MuxBase::CHANNEL_TYPE_AT);
 
-    const uint8_t write_byte_mux_open[6] =
-    {
+    const uint8_t write_byte_mux_open[6] = {
         FLAG_SEQUENCE_OCTET,
         ADDRESS_MUX_START_REQ_OCTET,
         (FRAME_TYPE_SABM | PF_BIT),
@@ -6036,7 +5951,7 @@ TEST_F(TestMux, channel_open_inside_the_channel_open_callback_mux_open_timeout)
     };
     FileWrite write(&(write_byte_mux_open[0]), sizeof(write_byte_mux_open), sizeof(write_byte_mux_open));
     EXPECT_CALL(fh_mock, write(NotNull(), sizeof(write_byte_mux_open)))
-                .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
+    .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
 
     mbed_equeue_stub::call_in_expect(T1_TIMER_VALUE, 1);
 
@@ -6052,7 +5967,7 @@ TEST_F(TestMux, channel_open_inside_the_channel_open_callback_mux_open_timeout)
     do {
         FileWrite write(&(write_byte_mux_open[0]), sizeof(write_byte_mux_open), sizeof(write_byte_mux_open));
         EXPECT_CALL(fh_mock, write(NotNull(), sizeof(write_byte_mux_open)))
-                    .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
+        .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
 
         mbed_equeue_stub::call_in_expect(T1_TIMER_VALUE, 1);
 
@@ -6071,8 +5986,7 @@ TEST_F(TestMux, channel_open_inside_the_channel_open_callback_mux_open_timeout)
     EXPECT_EQ(1, callback.completion_count_get());
 
     /* Read the mux open response frame. */
-    const uint8_t read_byte_mux_open[6] =
-    {
+    const uint8_t read_byte_mux_open[6] = {
         FLAG_SEQUENCE_OCTET,
         ADDRESS_MUX_START_RESP_OCTET,
         (FRAME_TYPE_UA | PF_BIT),
@@ -6082,8 +5996,7 @@ TEST_F(TestMux, channel_open_inside_the_channel_open_callback_mux_open_timeout)
     };
     /* Reception of the mux open response frame starts the channel creation procedure. */
     const uint32_t address                   = (3u) | (DLCI_ID_LOWER_BOUND << 2);
-    const uint8_t write_byte_channel_open[6] =
-    {
+    const uint8_t write_byte_channel_open[6] = {
         FLAG_SEQUENCE_OCTET,
         address,
         (FRAME_TYPE_SABM | PF_BIT),
@@ -6098,8 +6011,7 @@ TEST_F(TestMux, channel_open_inside_the_channel_open_callback_mux_open_timeout)
                                           fh_mock, sig_io);
 
     /* Receive user channel response.*/
-    const uint8_t read_byte_channel_open[5] =
-    {
+    const uint8_t read_byte_channel_open[5] = {
         write_byte_channel_open[1],
         (FRAME_TYPE_UA | PF_BIT),
         LENGTH_INDICATOR_OCTET,
@@ -6160,7 +6072,7 @@ TEST_F(TestMux, poll)
 
     MuxCallbackTest callback;
     obj.callback_attach(mbed::Callback<void(mbed::MuxBase::event_context_t &)>(&callback,
-                        &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
+                                                                               &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish a user channel. */
 
@@ -6182,8 +6094,7 @@ TEST_F(TestMux, poll)
 
     /* Start read cycle for the DLCI. */
     const uint8_t user_data    = 0xA5u;
-    const uint8_t read_byte[6] =
-    {
+    const uint8_t read_byte[6] = {
         1u | (DLCI_ID_LOWER_BOUND << 2),
         FRAME_TYPE_UIH,
         LENGTH_INDICATOR_OCTET | (sizeof(user_data) << 1),
@@ -6211,8 +6122,7 @@ TEST_F(TestMux, poll)
     /* Call poll when POLLIN. */
 
     /* Program write cycle. */
-    const uint8_t write_byte[7] =
-    {
+    const uint8_t write_byte[7] = {
         FLAG_SEQUENCE_OCTET,
         3u | (DLCI_ID_LOWER_BOUND << 2),
         FRAME_TYPE_UIH,
@@ -6279,7 +6189,7 @@ TEST_F(TestMux, tx_to_serial_fails_with_eagain_return)
 
     MuxCallbackTest callback;
     obj.callback_attach(mbed::Callback<void(mbed::MuxBase::event_context_t &)>(&callback,
-                        &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
+                                                                               &MuxCallbackTest::channel_open_run), mbed::MuxBase::CHANNEL_TYPE_AT);
 
     /* Establish a user channel. */
 
@@ -6296,8 +6206,7 @@ TEST_F(TestMux, tx_to_serial_fails_with_eagain_return)
 
     const uint8_t dlci_id       = 1u;
     uint8_t user_data           = 0xA5u;
-    const uint8_t write_byte[7] =
-    {
+    const uint8_t write_byte[7] = {
         FLAG_SEQUENCE_OCTET,
         3u | (dlci_id << 2),
         FRAME_TYPE_UIH,
@@ -6320,7 +6229,7 @@ TEST_F(TestMux, tx_to_serial_fails_with_eagain_return)
     /* Complete the write request which is in progress. */
     FileWrite write(&(write_byte[0]), sizeof(write_byte), sizeof(write_byte));
     EXPECT_CALL(fh_mock, write(NotNull(), sizeof(write_byte)))
-                .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
+    .WillOnce(Invoke(&write, &FileWrite::write)).RetiresOnSaturation();
 
     /* Trigger deferred call to execute the programmed mocks above. */
     mbed_equeue_stub::deferred_dispatch();

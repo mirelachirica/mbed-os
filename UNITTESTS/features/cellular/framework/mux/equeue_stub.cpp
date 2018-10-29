@@ -157,7 +157,7 @@ int equeue_post(equeue_t *queue, void (*cb)(void *), void *event)
         mbed_equeue_stub::deferred_cb_cntx = event;
     }
 #if 0
-        free(event);
+    free(event);
 #endif
 
     return mbed_equeue_stub::deferred_call_return_value;
@@ -182,7 +182,8 @@ void equeue_chain(equeue_t *queue, equeue_t *target)
 
 }
 
-int equeue_call_in(equeue_t *q, int ms, void (*cb)(void*), void *data) {
+int equeue_call_in(equeue_t *q, int ms, void (*cb)(void *), void *data)
+{
 //printf("equeue_call_in\r\n");
 
     return equeue_post(q, cb, data);

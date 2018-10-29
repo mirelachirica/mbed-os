@@ -17,7 +17,7 @@
 #ifndef __EQUEUE_STUB_H__
 #define __EQUEUE_STUB_H__
 
-typedef void (*mbed_equeue_stub_cb_func_t)(void*);
+typedef void (*mbed_equeue_stub_cb_func_t)(void *);
 
 namespace mbed_equeue_stub {
 extern int deferred_call_return_value;

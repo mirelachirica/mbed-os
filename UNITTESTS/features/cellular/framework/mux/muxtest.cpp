@@ -44,8 +44,12 @@ protected:
 };
 // *INDENT-ON*
 
-#define FRAME_HEADER_READ_LEN        3u
-#define FRAME_TRAILER_LEN            2u
+#define FRAME_HEADER_LEN             4u                          /* Length of the frame header part, includes the flag
+                                                                    octet. */
+#define FRAME_HEADER_READ_LEN        3u                          /* Read length of the frame header part, excludes the
+                                                                    flag octet. */
+#define FRAME_TRAILER_LEN            2u                          /* Combined length of FCS and flag sequence fields, in
+                                                                    number of bytes. */
 #define FLAG_SEQUENCE_OCTET_LEN      1u                          /* Length of the flag sequence field in number of
                                                                     bytes. */
 #define SABM_FRAME_LEN               6u                          /* Length of the SABM frame in number of bytes. */
@@ -556,7 +560,7 @@ void self_iniated_response_rx(const uint8_t            *rx_buf,
     if (resp_write_byte != NULL)  {
         /* RX frame completed, start the response frame TX sequence inside the current RX cycle. */
 
-        const uint8_t length_of_frame = 4u + (resp_write_byte[3] & ~1) + 2u; // @todo: FIX ME: magic numbers.
+        const uint8_t length_of_frame = FRAME_HEADER_LEN + (resp_write_byte[3] & ~1) + FRAME_TRAILER_LEN;
 
         FileWrite write_1(&(resp_write_byte[0]), length_of_frame, 1);
         EXPECT_CALL(fh, write(NotNull(), length_of_frame))
@@ -609,7 +613,7 @@ void single_complete_write_cycle(const uint8_t  *write_byte,
     if (new_write_byte != NULL) {
         /* Complete the write request of pending request frame. */
 
-        const uint8_t length_of_frame = 4u + (new_write_byte[3] & ~1) + 2u; // @todo: FIX ME: magic numbers.
+        const uint8_t length_of_frame = FRAME_HEADER_LEN + (new_write_byte[3] & ~1) + FRAME_TRAILER_LEN;
 
         FileWrite write(new_write_byte, length_of_frame, length_of_frame);
         EXPECT_CALL(fh, write(NotNull(), length_of_frame))
@@ -838,7 +842,7 @@ void peer_iniated_request_rx(const uint8_t            *rx_buf,
     if (resp_write_byte != NULL)  {
         /* RX frame completed, start the response frame TX sequence inside the current RX cycle. */
 
-        const uint8_t length_of_frame = 4u + (resp_write_byte[3] & ~1) + 2u; // @todo: FIX ME: magic numbers.
+        const uint8_t length_of_frame = FRAME_HEADER_LEN + (resp_write_byte[3] & ~1) + FRAME_TRAILER_LEN;
 
         FileWrite write_1(&(resp_write_byte[0]), length_of_frame, 1);
         EXPECT_CALL(fh, write(NotNull(), length_of_frame))
@@ -917,7 +921,7 @@ void peer_iniated_response_tx(const uint8_t  *buf,
             if (new_tx_byte != NULL) {
                 /* Last byte of the response frame written, write 1st byte of new pending frame. */
 
-                const uint8_t length_of_frame = 4u + (new_tx_byte[3] & ~1) + 2u; // @todo: FIX ME: magic numbers.
+                const uint8_t length_of_frame = FRAME_HEADER_LEN + (new_tx_byte[3] & ~1) + FRAME_TRAILER_LEN;
 
                 FileWrite write_2(&(new_tx_byte[0]), length_of_frame, 1);
                 EXPECT_CALL(fh, write(NotNull(), length_of_frame))
@@ -952,8 +956,6 @@ void single_byte_read_cycle(const uint8_t  *read_byte,
                             MockFileHandle &fh,
                             SigIo          &sig_io)
 {
-    EXPECT_TRUE(length >= 6); //@todo: MAGIC: 6 min size for UIH as payload min size is 1
-
     uint8_t current_read_len;
     uint8_t rx_count = 0;
 

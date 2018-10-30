@@ -989,7 +989,6 @@ nsapi_error Mux3GPP::channel_open()
     }
 
     nsapi_error err = NSAPI_ERROR_OK;
-#if 1
     switch (_tx_context.tx_state) {
         case TX_IDLE:
             if (_state.is_mux_open) {
@@ -1037,7 +1036,7 @@ nsapi_error Mux3GPP::channel_open()
             MBED_ASSERT(false);
             break;
     };
-#endif
+
     _mutex.unlock();
 
     return err;

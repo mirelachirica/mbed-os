@@ -79,7 +79,7 @@ public:
     {
         _cb_func = func;
     }
-    
+
 private:
 
     /* Definition for Rx event type. */
@@ -132,7 +132,7 @@ private:
 
     /** Registered deferred call event in safe (thread context) supplied in @ref eventqueue_attach. */
     void on_deferred_call();
-    
+
     /** Registered sigio callback from FileHandle. */
     void on_sigio();
 

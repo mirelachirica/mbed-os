@@ -62,13 +62,11 @@ void call_expect(int return_value)
 
 void deferred_dispatch()
 {
-//printf("deferred_dispatch\r\n");
     deferred_cb(deferred_cb_cntx);
 }
 
 void timer_dispatch()
 {
-//printf("timer_dispatch\r\n");
     timer_cb(timer_cb_cntx);
 }
 
@@ -101,7 +99,6 @@ void equeue_break(equeue_t *queue)
 
 int equeue_call(equeue_t *queue, void (*cb)(void *), void *data)
 {
-//printf("!!equeue_call\r\n");
     return 0;
 }
 
@@ -138,27 +135,21 @@ void equeue_event_dtor(void *event, void (*dtor)(void *))
 
 int equeue_post(equeue_t *queue, void (*cb)(void *), void *event)
 {
-//printf("equeue_post\r\n");
-
     if (mbed_equeue_stub::is_delay_called) {
         mbed_equeue_stub::is_delay_called = false;
-//printf("store timer\r\n");
+
         EXPECT_TRUE(mbed_equeue_stub::is_call_in_armed);
         mbed_equeue_stub::is_call_in_armed = false;
 
         mbed_equeue_stub::timer_cb        = cb;
         mbed_equeue_stub::timer_cb_cntx   = event;
     } else {
-//printf("store deferred\r\n");
         EXPECT_TRUE(mbed_equeue_stub::is_call_armed);
         mbed_equeue_stub::is_call_armed = false;
 
         mbed_equeue_stub::deferred_cb      = cb;
         mbed_equeue_stub::deferred_cb_cntx = event;
     }
-#if 0
-    free(event);
-#endif
 
     return mbed_equeue_stub::deferred_call_return_value;
 }
@@ -184,7 +175,5 @@ void equeue_chain(equeue_t *queue, equeue_t *target)
 
 int equeue_call_in(equeue_t *q, int ms, void (*cb)(void *), void *data)
 {
-//printf("equeue_call_in\r\n");
-
     return equeue_post(q, cb, data);
 }

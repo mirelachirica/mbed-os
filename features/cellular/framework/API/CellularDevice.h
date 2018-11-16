@@ -86,7 +86,7 @@ public:
      *  @return         new instance of class CellularContext or NULL in case of failure
      *
      */
-    virtual CellularContext *create_context(FileHandle *fh = NULL, const char *apn = MBED_CONF_NSAPI_DEFAULT_CELLULAR_APN, nsapi_ip_stack_t stack = DEFAULT_STACK) = 0;
+    virtual CellularContext *create_context(FileHandle *fh = NULL, const char *apn = MBED_CONF_NSAPI_DEFAULT_CELLULAR_APN, bool cp_req = false, bool nonip_req = false) = 0;
 
     /** Deletes the given CellularContext instance
      *

@@ -48,7 +48,7 @@ AT_CellularPower *QUECTEL_UG96::open_power_impl(ATHandler &at)
     return new QUECTEL_UG96_CellularPower(at);
 }
 
-AT_CellularContext *QUECTEL_UG96::create_context_impl(ATHandler &at, const char *apn, nsapi_ip_stack_t stack)
+AT_CellularContext *QUECTEL_UG96::create_context_impl(ATHandler &at, const char *apn, bool cp_req, bool nonip_req)
 {
-    return new QUECTEL_UG96_CellularContext(at, this, apn, stack);
+    return new QUECTEL_UG96_CellularContext(at, this, apn, cp_req, nonip_req);
 }

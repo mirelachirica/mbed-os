@@ -60,7 +60,7 @@ AT_CellularSIM *QUECTEL_BC95::open_sim_impl(ATHandler &at)
     return new QUECTEL_BC95_CellularSIM(at);
 }
 
-AT_CellularContext *QUECTEL_BC95::create_context_impl(ATHandler &at, const char *apn, nsapi_ip_stack_t stack)
+AT_CellularContext *QUECTEL_BC95::create_context_impl(ATHandler &at, const char *apn, bool cp_req, bool nonip_req)
 {
-    return new QUECTEL_BC95_CellularContext(at, this, apn, stack);
+    return new QUECTEL_BC95_CellularContext(at, this, apn, cp_req, nonip_req);
 }

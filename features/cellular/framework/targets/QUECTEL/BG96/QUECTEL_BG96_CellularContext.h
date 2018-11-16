@@ -23,13 +23,20 @@ namespace mbed {
 
 class QUECTEL_BG96_CellularContext: public AT_CellularContext {
 public:
-    QUECTEL_BG96_CellularContext(ATHandler &at, CellularDevice *device, const char *apn, nsapi_ip_stack_t stack);
+    QUECTEL_BG96_CellularContext(ATHandler &at, CellularDevice *device, const char *apn, bool cp_req = false, bool nonip_req = false);
     virtual ~QUECTEL_BG96_CellularContext();
 
 protected:
-    virtual bool stack_type_supported(nsapi_ip_stack_t stack_type);
+    virtual bool pdp_type_supported(pdp_type_t pdp_type);
     virtual NetworkStack *get_stack();
+    virtual ControlPlane_netif *get_cp_netif();
     virtual nsapi_error_t do_user_authentication();
+    virtual nsapi_error_t activate_non_ip_context();
+
+private:
+    void urc_nidd();
+    void nidd_open();
+    void nidd_close();
 };
 
 } /* namespace mbed */

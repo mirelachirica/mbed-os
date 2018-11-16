@@ -21,7 +21,7 @@
 namespace mbed {
 
 GEMALTO_CINTERION_CellularContext::GEMALTO_CINTERION_CellularContext(ATHandler &at, CellularDevice *device,
-        const char *apn, nsapi_ip_stack_t stack) : AT_CellularContext(at, device, apn, stack)
+        const char *apn, bool cp_req, bool nonip_req) : AT_CellularContext(at, device, apn, cp_req, nonip_req)
 {
 }
 
@@ -32,22 +32,27 @@ GEMALTO_CINTERION_CellularContext::~GEMALTO_CINTERION_CellularContext()
 #if !NSAPI_PPP_AVAILABLE
 NetworkStack *GEMALTO_CINTERION_CellularContext::get_stack()
 {
+    if (_pdp_type == NON_IP_PDP_TYPE || _cp_in_use) {
+        //tr_error("Requesting stack for NON-IP context! Should request control plane netif: get_cp_netif()");
+        return NULL;
+    }
+
     if (!_stack) {
-        _stack = new GEMALTO_CINTERION_CellularStack(_at, _apn, _cid, _ip_stack_type);
+        _stack = new GEMALTO_CINTERION_CellularStack(_at, _apn, _cid, (nsapi_ip_stack_t)_pdp_type);
     }
     return _stack;
 }
 #endif // NSAPI_PPP_AVAILABLE
 
-bool GEMALTO_CINTERION_CellularContext::stack_type_supported(nsapi_ip_stack_t requested_stack)
+bool GEMALTO_CINTERION_CellularContext::pdp_type_supported(pdp_type_t pdp_type)
 {
 #if NSAPI_PPP_AVAILABLE
-    return (requested_stack == IPV4_STACK || requested_stack == IPV6_STACK);
+    return (pdp_type == IPV4_PDP_TYPE || pdp_type == IPV6_PDP_TYPE);
 #else
     if (GEMALTO_CINTERION_Module::get_model() == GEMALTO_CINTERION_Module::ModelBGS2) {
-        return (requested_stack == IPV4_STACK);
+        return (pdp_type == IPV4_PDP_TYPE);
     }
-    return (requested_stack == IPV4_STACK || requested_stack == IPV6_STACK);
+    return (pdp_type == IPV4_PDP_TYPE || pdp_type == IPV6_PDP_TYPE);
 #endif
 }
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017, Arm Limited and affiliates.
+ * Copyright (c) 2018, Arm Limited and affiliates.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,25 +14,23 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+#ifndef QUECTEL_BG96_CONTROLPLANE_NETIF_H_
+#define QUECTEL_BG96_CONTROLPLANE_NETIF_H_
 
-#ifndef UBLOX_PPP_H_
-#define UBLOX_PPP_H_
-
-#include "AT_CellularDevice.h"
+#include "AT_ControlPlane_netif.h"
 
 namespace mbed {
 
-class UBLOX_PPP : public AT_CellularDevice {
+class QUECTEL_BG96_ControlPlane_netif: public AT_ControlPlane_netif {
 public:
-    UBLOX_PPP(events::EventQueue &queue);
-    virtual ~UBLOX_PPP();
+    QUECTEL_BG96_ControlPlane_netif(ATHandler &at, int cid);
+    virtual ~QUECTEL_BG96_ControlPlane_netif(){};
 
-protected: // AT_CellularDevice
-    virtual AT_CellularNetwork *open_network_impl(ATHandler &at);
-    virtual AT_CellularPower *open_power_impl(ATHandler &at);
-    virtual AT_CellularContext *create_context_impl(ATHandler &at, const char *apn, bool cp_req = false, bool nonip_req = false);
+// ControlPlane_netif
+    nsapi_error_t send(const void *data, nsapi_size_t size);
+    nsapi_error_t recv(void *buffer, nsapi_size_t size);
 };
 
-} // namespace mbed
+} /* namespace mbed */
 
-#endif // UBLOX_PPP_H_
+#endif // QUECTEL_BG96_CONTROLPLANE_NETIF_H_

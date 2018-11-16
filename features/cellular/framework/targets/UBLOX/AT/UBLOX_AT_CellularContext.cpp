@@ -20,8 +20,7 @@
 
 namespace mbed {
 
-UBLOX_AT_CellularContext::UBLOX_AT_CellularContext(ATHandler &at, CellularDevice *device, const char *apn,
-        nsapi_ip_stack_t stack) : AT_CellularContext(at, device, apn, stack)
+UBLOX_AT_CellularContext::UBLOX_AT_CellularContext(ATHandler &at, CellularDevice *device, const char *apn, bool cp_req, bool nonip_req) : AT_CellularContext(at, device, apn, cp_req, nonip_req)
 {
     // The authentication to use
     _auth = NSAPI_SECURITY_UNKNOWN;
@@ -33,15 +32,20 @@ UBLOX_AT_CellularContext::~UBLOX_AT_CellularContext()
 
 NetworkStack *UBLOX_AT_CellularContext::get_stack()
 {
-    if (!_stack) {
-        _stack = new UBLOX_AT_CellularStack(_at, _cid, _ip_stack_type);
+    if (_pdp_type == NON_IP_PDP_TYPE || _cp_in_use) {
+        //tr_error("Requesting stack for NON-IP context! Should request control plane netif: get_cp_netif()");
+        return NULL;
     }
+    if (!_stack) {
+            _stack = new UBLOX_AT_CellularStack(_at, _cid, (nsapi_ip_stack_t)_pdp_type);
+    }
+
     return _stack;
 }
 
-bool UBLOX_AT_CellularContext::stack_type_supported(nsapi_ip_stack_t requested_stack)
+bool UBLOX_AT_CellularContext::pdp_type_supported(pdp_type_t pdp_type)
 {
-    return requested_stack == IPV4_STACK ? true : false;
+    return pdp_type == IPV4_PDP_TYPE ? true : false;
 }
 
 void UBLOX_AT_CellularContext::do_connect()

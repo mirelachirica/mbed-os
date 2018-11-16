@@ -18,8 +18,7 @@
 
 namespace mbed {
 
-TELIT_HE910_CellularContext::TELIT_HE910_CellularContext(ATHandler &at, CellularDevice *device, const char *apn,
-        nsapi_ip_stack_t stack) : AT_CellularContext(at, device, apn, stack)
+TELIT_HE910_CellularContext::TELIT_HE910_CellularContext(ATHandler &at, CellularDevice *device, const char *apn, bool cp_req, bool nonip_req) : AT_CellularContext(at, device, apn, cp_req, nonip_req)
 {
 }
 
@@ -27,9 +26,9 @@ TELIT_HE910_CellularContext::~TELIT_HE910_CellularContext()
 {
 }
 
-bool TELIT_HE910_CellularContext::stack_type_supported(nsapi_ip_stack_t requested_stack)
+bool TELIT_HE910_CellularContext::pdp_type_supported(pdp_type_t pdp_type)
 {
-    return requested_stack == IPV4_STACK || requested_stack == IPV6_STACK;
+    return pdp_type == IPV4_PDP_TYPE || pdp_type == IPV6_PDP_TYPE;
 }
 
 } /* namespace mbed */

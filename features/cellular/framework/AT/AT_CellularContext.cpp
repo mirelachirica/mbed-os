@@ -28,13 +28,13 @@
 using namespace mbed_cellular_util;
 using namespace mbed;
 
-AT_CellularContext::AT_CellularContext(ATHandler &at, CellularDevice *device, const char *apn, nsapi_ip_stack_t stack) :
-        AT_CellularBase(at), _ip_stack_type_requested(DEFAULT_STACK), _is_connected(false), _is_blocking(true),
-        _current_op(OP_INVALID), _device(device), _nw(0), _fh(0)
+AT_CellularContext::AT_CellularContext(ATHandler &at, CellularDevice *device, const char *apn, bool cp_req, bool nonip_req) :
+        AT_CellularBase(at), _ip_pdp_type_requested(DEFAULT_PDP_TYPE), _is_connected(false), _is_blocking(true),
+        _current_op(OP_INVALID), _device(device), _nw(0), _fh(0), _cp_req(cp_req), _nonip_req(nonip_req), _cp_netif(NULL)
 {
-    tr_debug("AT_CellularContext::AT_CellularContext(): apn: %s, stack: %d", apn, stack);
+    tr_debug("AT_CellularContext::AT_CellularContext(): apn: %s", apn);
     _stack = NULL;
-    _ip_stack_type = DEFAULT_STACK;
+    _pdp_type = DEFAULT_PDP_TYPE;
     _authentication_type = CellularContext::CHAP;
     _connect_status = NSAPI_STATUS_DISCONNECTED;
     _is_context_active = false;
@@ -46,6 +46,20 @@ AT_CellularContext::AT_CellularContext(ATHandler &at, CellularDevice *device, co
     _cid = -1;
     _new_context_set = false;
     _next = NULL;
+    _cp_in_use = false;
+    _nonip_in_use = false;
+
+    if (_cp_req) {
+        _at.set_urc_handler("+CRTDCP:", mbed::Callback<void()>(this, &AT_CellularContext::urc_cp_recv));
+    }
+}
+
+void AT_CellularContext::urc_cp_recv()
+{
+    // read the data and data len
+    char *buffer = NULL;
+    int len = 0;
+    _cp_netif->data_received(buffer, len);
 }
 
 AT_CellularContext::~AT_CellularContext()
@@ -202,31 +216,29 @@ void AT_CellularContext::set_apn_credentials(const char* apn, const char *uname,
     _authentication_type = type;
 }
 
-bool AT_CellularContext::stack_type_supported(nsapi_ip_stack_t stack_type)
+bool AT_CellularContext::pdp_type_supported(pdp_type_t pdp_type)
 {
-    if (stack_type == _ip_stack_type) {
-        return true;
-    } else {
-        return false;
-    }
+    return pdp_type == IPV4_PDP_TYPE ? true : false;
 }
 
-nsapi_ip_stack_t AT_CellularContext::get_stack_type()
+pdp_type_t AT_CellularContext::get_pdp_type()
 {
-    return _ip_stack_type;
+    return _pdp_type;
 }
 
-nsapi_ip_stack_t AT_CellularContext::string_to_stack_type(const char *pdp_type)
+pdp_type_t AT_CellularContext::string_to_pdp_type(const char *pdp_type)
 {
-    nsapi_ip_stack_t stack = DEFAULT_STACK;
+    pdp_type_t stack = DEFAULT_PDP_TYPE;
     int len = strlen(pdp_type);
 
     if (len == 6 && memcmp(pdp_type, "IPV4V6", len) == 0) {
-        stack = IPV4V6_STACK;
+        stack = IPV4V6_PDP_TYPE;
     } else if (len == 4 && memcmp(pdp_type, "IPV6", len) == 0) {
-        stack = IPV6_STACK;
+        stack = IPV6_PDP_TYPE;
     } else if (len == 2 && memcmp(pdp_type, "IP", len) == 0) {
-        stack = IPV4_STACK;
+        stack = IPV4_PDP_TYPE;
+    } else if (len == 6 && memcmp(pdp_type, "Non-IP", len) == 0) {
+        stack = NON_IP_PDP_TYPE;
     }
     return stack;
 }
@@ -286,9 +298,6 @@ bool AT_CellularContext::get_context()
     char apn[MAX_ACCESSPOINT_NAME_LENGTH];
     int apn_len = 0;
 
-    bool modem_supports_ipv6 = stack_type_supported(IPV6_STACK);
-    bool modem_supports_ipv4 = stack_type_supported(IPV4_STACK);
-
     while (_at.info_resp()) {
         int cid = _at.read_int();
         if (cid > cid_max) {
@@ -302,51 +311,19 @@ bool AT_CellularContext::get_context()
                 if (_apn && (strcmp(apn, _apn) != 0)) {
                     continue;
                 }
-                nsapi_ip_stack_t pdp_stack = string_to_stack_type(pdp_type_from_context);
-                // Accept dual PDP context for IPv4/IPv6 only modems
-                if (pdp_stack != DEFAULT_STACK && (stack_type_supported(pdp_stack) || pdp_stack == IPV4V6_STACK)) {
-                    if (_ip_stack_type_requested == IPV4_STACK) {
-                        if (pdp_stack == IPV4_STACK || pdp_stack == IPV4V6_STACK) {
-                            _ip_stack_type = _ip_stack_type_requested;
-                            _cid = cid;
-                            break;
-                        }
-                    } else if (_ip_stack_type_requested == IPV6_STACK) {
-                        if (pdp_stack == IPV6_STACK || pdp_stack == IPV4V6_STACK) {
-                            _ip_stack_type = _ip_stack_type_requested;
-                            _cid = cid;
-                            break;
-                        }
-                    } else {
-                        // requested dual stack or stack is not specified
-                        // If dual PDP need to check for IPV4 or IPV6 modem support. Prefer IPv6.
-                        if (pdp_stack == IPV4V6_STACK) {
-                            if (modem_supports_ipv6) {
-                                _ip_stack_type = IPV6_STACK;
-                                _cid = cid;
-                                break;
-                            } else if (modem_supports_ipv4) {
-                                _ip_stack_type = IPV4_STACK;
-                                _cid = cid;
-                                break;
-                            }
-                            // If PDP is IPV4 or IPV6 they are already checked if supported
-                        } else {
-                            _ip_stack_type = pdp_stack;
-                            _cid = cid;
 
-                            if (pdp_stack == IPV6_STACK) {
-                                break;
-                            }
-                            if (pdp_stack == IPV4_STACK && !modem_supports_ipv6) {
-                                break;
-                            }
-                        }
-                    }
+                // APN matched -> Check stack type
+                pdp_type_t pdp_type = string_to_pdp_type(pdp_type_from_context);
+
+                // Accept exact matching PDP context type or dual PDP context for IPv4/IPv6 only modems
+                if (pdp_type_supported(pdp_type) || ((pdp_type == IPV4V6_PDP_TYPE) && !_nonip_req)) {
+                    _pdp_type = pdp_type;
+                    _cid = cid;
                 }
             }
         }
     }
+
     _at.resp_stop();
     if (_cid == -1) { // no suitable context was found so create a new one
         if (!set_new_context(cid_max + 1)) {
@@ -365,64 +342,39 @@ bool AT_CellularContext::get_context()
 
 bool AT_CellularContext::set_new_context(int cid)
 {
-    nsapi_ip_stack_t tmp_stack = _ip_stack_type_requested;
+    bool modem_supports_ipv6 = pdp_type_supported(IPV6_PDP_TYPE);
+    bool modem_supports_ipv4 = pdp_type_supported(IPV4_PDP_TYPE);
 
-    if (tmp_stack == DEFAULT_STACK) {
-        bool modem_supports_ipv6 = stack_type_supported(IPV6_STACK);
-        bool modem_supports_ipv4 = stack_type_supported(IPV4_STACK);
+    char pdp_type_str[8 + 1] = {0};
+    pdp_type_t pdp_type = IPV4_PDP_TYPE;
 
-        if (modem_supports_ipv6 && modem_supports_ipv4) {
-            tmp_stack = IPV4V6_STACK;
-        } else if (modem_supports_ipv6) {
-            tmp_stack = IPV6_STACK;
-        } else if (modem_supports_ipv4) {
-            tmp_stack = IPV4_STACK;
-        }
-    }
-
-    char pdp_type[8 + 1] = {0};
-
-    switch (tmp_stack) {
-        case IPV4_STACK:
-            strncpy(pdp_type, "IP", sizeof(pdp_type));
-            break;
-        case IPV6_STACK:
-            strncpy(pdp_type, "IPV6", sizeof(pdp_type));
-            break;
-        case IPV4V6_STACK:
-            strncpy(pdp_type, "IPV6", sizeof(pdp_type)); // try first IPV6 and then fall-back to IPv4
-            break;
-        default:
-            break;
+    if (_nonip_req) {
+        strncpy(pdp_type_str, "Non-IP", sizeof(pdp_type_str));
+        pdp_type = NON_IP_PDP_TYPE;
+    } else if (modem_supports_ipv6 && modem_supports_ipv4) {
+        strncpy(pdp_type_str, "IPV4V6", sizeof(pdp_type_str));
+        pdp_type = IPV4V6_PDP_TYPE;
+    } else if (modem_supports_ipv6) {
+        strncpy(pdp_type_str, "IPV6", sizeof(pdp_type_str));
+        pdp_type = IPV6_PDP_TYPE;
+    } else if (modem_supports_ipv4) {
+        strncpy(pdp_type_str, "IP", sizeof(pdp_type));
+        pdp_type = IPV4_PDP_TYPE;
     }
 
     //apn: "If the value is null or omitted, then the subscription value will be requested."
     bool success = false;
     _at.cmd_start("AT+CGDCONT=");
     _at.write_int(cid);
-    _at.write_string(pdp_type);
+    _at.write_string(pdp_type_str);
     _at.write_string(_apn);
     _at.cmd_stop();
     _at.resp_start();
     _at.resp_stop();
     success = (_at.get_last_error() == NSAPI_ERROR_OK);
 
-    // Fall back to ipv4
-    if (!success && tmp_stack == IPV4V6_STACK) {
-        _at.clear_error();
-        tmp_stack = IPV4_STACK;
-        _at.cmd_start("AT+FCLASS=0;+CGDCONT=");
-        _at.write_int(cid);
-        _at.write_string("IP");
-        _at.write_string(_apn);
-        _at.cmd_stop();
-        _at.resp_start();
-        _at.resp_stop();
-        success = (_at.get_last_error() == NSAPI_ERROR_OK);
-    }
-
     if (success) {
-        _ip_stack_type = tmp_stack;
+        _pdp_type = pdp_type;
         _cid = cid;
         _new_context_set = true;
         tr_info("New PDP context id %d was created", _cid);
@@ -433,11 +385,30 @@ bool AT_CellularContext::set_new_context(int cid)
 
 nsapi_error_t AT_CellularContext::do_activate_context()
 {
+    if(_nonip_req) {
+        return activate_non_ip_context();
+    }
+
+    return activate_ip_context();
+}
+
+nsapi_error_t AT_CellularContext::activate_ip_context()
+{
+    return activate_context();
+}
+
+nsapi_error_t AT_CellularContext::activate_non_ip_context()
+{
+    return activate_context();
+}
+
+nsapi_error_t AT_CellularContext::activate_context()
+{
    _at.lock();
 
     nsapi_error_t err = NSAPI_ERROR_OK;
 
-    // try to find or create context with suitable stack
+    // try to find or create context of suitable type
     if (get_context()) {
 #if NSAPI_PPP_AVAILABLE
         // in PPP we don't activate any context but leave it to PPP stack
@@ -456,7 +427,7 @@ nsapi_error_t AT_CellularContext::do_activate_context()
         return err;
     }
 
-    // do check for stack to validate that we have support for stack
+    // ??? do check for stack to validate that we have support for stack
     if (!get_stack()) {
         tr_error("No cellular stack!");
         return NSAPI_ERROR_UNSUPPORTED;
@@ -564,7 +535,7 @@ nsapi_error_t AT_CellularContext::open_data_channel()
     /* Initialize PPP
      * If blocking: mbed_ppp_init() is a blocking call, it will block until
                   connected, or timeout after 30 seconds*/
-    return nsapi_ppp_connect(_at.get_file_handle(), callback(this, &AT_CellularContext::ppp_status_cb), _uname, _pwd, _ip_stack_type);
+    return nsapi_ppp_connect(_at.get_file_handle(), callback(this, &AT_CellularContext::ppp_status_cb), _uname, _pwd, _pdp_type);
 }
 
 void AT_CellularContext::ppp_status_cb(nsapi_event_t ev, intptr_t ptr)
@@ -868,4 +839,9 @@ void AT_CellularContext::call_network_cb(nsapi_connection_status_t status)
             _status_cb(NSAPI_EVENT_CONNECTION_STATUS_CHANGE, _connect_status);
         }
     }
+}
+
+ControlPlane_netif *AT_CellularContext::get_cp_netif()
+{
+    return NULL;
 }

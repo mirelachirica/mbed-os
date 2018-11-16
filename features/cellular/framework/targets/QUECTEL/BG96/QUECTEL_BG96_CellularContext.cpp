@@ -16,21 +16,26 @@
  */
 #include "QUECTEL_BG96_CellularContext.h"
 #include "QUECTEL_BG96_CellularStack.h"
+#include "QUECTEL_BG96_ControlPlane_netif.h"
 
 namespace mbed {
 
-QUECTEL_BG96_CellularContext::QUECTEL_BG96_CellularContext(ATHandler &at, CellularDevice *device, const char *apn,
-        nsapi_ip_stack_t stack) : AT_CellularContext(at, device, apn, stack)
+QUECTEL_BG96_CellularContext::QUECTEL_BG96_CellularContext(ATHandler &at, CellularDevice *device, const char *apn, bool cp_req, bool nonip_req) : AT_CellularContext(at, device, apn, cp_req, nonip_req)
 {
+    // No setup needed to go to control plane mode for BG96
+    _cp_in_use = cp_req;
+    if (_nonip_in_use) {
+        _at.set_urc_handler("+QIND: \"nipd\"", mbed::Callback<void()>(this, &QUECTEL_BG96_CellularContext::urc_nidd));
+    }
 }
 
 QUECTEL_BG96_CellularContext::~QUECTEL_BG96_CellularContext()
 {
 }
 
-bool QUECTEL_BG96_CellularContext::stack_type_supported(nsapi_ip_stack_t stack_type)
+bool QUECTEL_BG96_CellularContext::pdp_type_supported(pdp_type_t pdp_type)
 {
-    if (stack_type == IPV4_STACK) {
+    if (pdp_type == IPV4_PDP_TYPE || pdp_type == NON_IP_PDP_TYPE) {
         return true;
     }
     return false;
@@ -38,10 +43,24 @@ bool QUECTEL_BG96_CellularContext::stack_type_supported(nsapi_ip_stack_t stack_t
 
 NetworkStack *QUECTEL_BG96_CellularContext::get_stack()
 {
-    if (!_stack) {
-        _stack = new QUECTEL_BG96_CellularStack(_at, _cid, _ip_stack_type);
+    if (_pdp_type == NON_IP_PDP_TYPE || _cp_in_use) {
+        //tr_error("Requesting stack for NON-IP context! Should request control plane netif: get_cp_netif()");
+        return NULL;
     }
+
+    if (!_stack) {
+        _stack = new QUECTEL_BG96_CellularStack(_at, _cid, (nsapi_ip_stack_t)_pdp_type);
+    }
+
     return _stack;
+}
+
+ControlPlane_netif *QUECTEL_BG96_CellularContext::get_cp_netif()
+{
+    if (!_cp_netif) {
+        _cp_netif = new QUECTEL_BG96_ControlPlane_netif(_at, _cid);
+    }
+    return _cp_netif;
 }
 
 nsapi_error_t QUECTEL_BG96_CellularContext::do_user_authentication()
@@ -63,6 +82,76 @@ nsapi_error_t QUECTEL_BG96_CellularContext::do_user_authentication()
     }
 
     return NSAPI_ERROR_OK;
+}
+
+nsapi_error_t QUECTEL_BG96_CellularContext::activate_non_ip_context()
+{
+    _at.lock();
+
+    // Setup Non-IP context, supported only for cid 1
+    _at.cmd_start("AT+QCFGEXT=\"pdp_type\",1,\"Non-IP\"");
+    _at.write_string(_apn);
+    _at.cmd_stop();
+    _at.resp_start();
+    _at.resp_stop();
+    _at.cmd_start("AT+CFUN=0");
+    _at.cmd_stop();
+    _at.resp_start();
+    _at.resp_stop();
+    _at.cmd_start("AT+CFUN=1");
+    _at.cmd_stop();
+    _at.resp_start();
+    _at.resp_stop();
+
+    // Configure Non-IP outgoing data type - 0 for no exception data
+    _at.cmd_start("AT+QCFGEXT=\"nipdcfg\",0");
+    _at.write_string(_apn);
+    _at.cmd_stop();
+    _at.resp_start();
+    _at.resp_stop();
+
+    // Open the NIDD connection
+    _at.cmd_start("AT+QCFGEXT=\"nipd\",1");
+    _at.cmd_stop();
+    _at.resp_start();
+    _at.resp_stop();
+
+    if (_at.get_last_error() == NSAPI_ERROR_OK) {
+        // wait for +QIND: "nipd","open",<err> ????
+        _is_context_active = true;
+        _is_context_activated = true; // did we activate the context
+    }
+
+    _at.unlock();
+
+    return NSAPI_ERROR_OK;
+}
+
+void QUECTEL_BG96_CellularContext::urc_nidd()
+{
+    char nipd_string[6];
+
+    _at.read_string(nipd_string, sizeof(nipd_string));
+
+    if (!strcmp(nipd_string,"recv")) {
+        _cp_netif->data_received();
+    } else if (!strcmp(nipd_string,"open")) {
+        nidd_open();
+    } else if (!strcmp(nipd_string,"close")) {
+        nidd_close();
+    }
+
+}
+
+void QUECTEL_BG96_CellularContext::nidd_open()
+{
+    // read the rest -> err
+    // context is active if err = 0
+}
+
+void QUECTEL_BG96_CellularContext::nidd_close()
+{
+    //context disconect
 }
 
 } /* namespace mbed */

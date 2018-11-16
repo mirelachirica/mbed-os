@@ -23,12 +23,12 @@ namespace mbed {
 
 class QUECTEL_BC95_CellularContext: public AT_CellularContext {
 public:
-    QUECTEL_BC95_CellularContext(ATHandler &at, CellularDevice *device, const char *apn, nsapi_ip_stack_t stack);
+    QUECTEL_BC95_CellularContext(ATHandler &at, CellularDevice *device, const char *apn, bool cp_req = false, bool nonip_req = false);
     virtual ~QUECTEL_BC95_CellularContext();
 
 protected:
     virtual NetworkStack *get_stack();
-    virtual bool get_modem_stack_type(nsapi_ip_stack_t requested_stack);
+    virtual bool pdp_type_supported(pdp_type_t pdp_type);
 };
 
 } /* namespace mbed */

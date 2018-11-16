@@ -27,8 +27,7 @@ namespace mbed {
 
 class AT_CellularContext : public CellularContext, public AT_CellularBase {
 public:
-    AT_CellularContext(ATHandler &at, CellularDevice *device, const char *apn = MBED_CONF_NSAPI_DEFAULT_CELLULAR_APN,
-            nsapi_ip_stack_t stack = DEFAULT_STACK);
+    AT_CellularContext(ATHandler &at, CellularDevice *device, const char *apn = MBED_CONF_NSAPI_DEFAULT_CELLULAR_APN, bool cp_req = false, bool nonip_req = false);
     virtual ~AT_CellularContext();
 
 public: // from NetworkInterface
@@ -55,6 +54,8 @@ public: // from CellularContext
             CellularContext::AuthenticationType type = CellularContext::CHAP);
     virtual void set_file_handle(FileHandle *fh);
 
+    virtual ControlPlane_netif *get_cp_netif();
+
 protected:
     virtual void cellular_callback(nsapi_event_t ev, intptr_t ptr);
 
@@ -72,11 +73,13 @@ protected:
      */
     virtual void do_connect();
 
-    /** Check if modem supports the given stack type. Can be overridden by the modem.
+    /** Check if modem supports the given stack type. By default support is IPV4 only.
+     *  To be overridden by modem if other types are supported.
+     *  !!! remove modem specific methods which are made to support only ipv4 !!!
      *
      *  @return true if supported
      */
-    virtual bool stack_type_supported(nsapi_ip_stack_t stack_type);
+    virtual bool pdp_type_supported(pdp_type_t pdp_type);
 
     /** Get the operation specific timeout. Used in synchronous mode when setting the maximum
      *   waiting time. Modem specific implementation can override this to provide different timeouts.
@@ -92,21 +95,29 @@ protected:
      */
     void call_network_cb(nsapi_connection_status_t status);
 
+
+
+    virtual nsapi_error_t activate_non_ip_context();
+
 private:
 #if NSAPI_PPP_AVAILABLE
     nsapi_error_t open_data_channel();
     void ppp_status_cb(nsapi_event_t ev, intptr_t ptr);
 #endif // #if NSAPI_PPP_AVAILABLE
     nsapi_error_t do_activate_context();
+    nsapi_error_t activate_context();
+    nsapi_error_t activate_ip_context();
     bool set_new_context(int cid);
     bool get_context();
     nsapi_error_t delete_current_context();
-    nsapi_ip_stack_t string_to_stack_type(const char *pdp_type);
-    nsapi_ip_stack_t get_stack_type();
+    pdp_type string_to_pdp_type(const char *pdp_type);
+    pdp_type_t get_pdp_type();
     nsapi_error_t check_operation(nsapi_error_t err, ContextOperation op);
 
+    void urc_cp_recv();
+
 private:
-    nsapi_ip_stack_t _ip_stack_type_requested;
+    pdp_type_t _ip_pdp_type_requested;
     bool _is_connected;
     bool _is_blocking;
     ContextOperation  _current_op;
@@ -115,6 +126,18 @@ private:
     CellularNetwork *_nw;
     FileHandle *_fh;
     rtos::Semaphore _semaphore;
+
+protected:
+    // flag indicating if CP was requested to be setup
+    bool _cp_req;
+    // flag indicating if Non-IP context was requested to be setup
+    bool _nonip_req;
+
+    // tells if CCIOTOPTI received green from network for CP optimisation use
+    bool _cp_in_use;
+    // tells if we are ready to configure Non-IP PDP context
+    bool _nonip_in_use;
+    ControlPlane_netif *_cp_netif;
 };
 
 } // namespace mbed

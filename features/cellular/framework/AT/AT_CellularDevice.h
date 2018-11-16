@@ -55,7 +55,7 @@ public: // CellularDevice
 
     virtual events::EventQueue *get_queue() const;
 
-    virtual CellularContext *create_context(FileHandle *fh = NULL, const char *apn = MBED_CONF_NSAPI_DEFAULT_CELLULAR_APN, nsapi_ip_stack_t stack = DEFAULT_STACK);
+    virtual CellularContext *create_context(FileHandle *fh = NULL, const char *apn = MBED_CONF_NSAPI_DEFAULT_CELLULAR_APN, bool cp_req = false, bool nonip_req = false);
 
     virtual void delete_context(CellularContext *context);
 
@@ -97,7 +97,7 @@ protected:
      *  @return         new instance of class AT_CellularContext
      *
      */
-    virtual AT_CellularContext *create_context_impl(ATHandler &at, const char *apn, nsapi_ip_stack_t stack);
+    virtual AT_CellularContext *create_context_impl(ATHandler &at, const char *apn, bool cp_req = false, bool nonip_req = false);
 
     /** Create new instance of AT_CellularNetwork or if overridden, modem specific implementation.
      *

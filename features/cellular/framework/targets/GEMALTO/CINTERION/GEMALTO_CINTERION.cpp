@@ -41,9 +41,9 @@ AT_CellularNetwork *GEMALTO_CINTERION::open_network_impl(ATHandler &at)
     return new GEMALTO_CINTERION_CellularNetwork(at);
 }
 
-AT_CellularContext *GEMALTO_CINTERION::create_context_impl(ATHandler &at, const char *apn, nsapi_ip_stack_t stack)
+AT_CellularContext *GEMALTO_CINTERION::create_context_impl(ATHandler &at, const char *apn, bool cp_req, bool nonip_req)
 {
-    return new GEMALTO_CINTERION_CellularContext(at, this, apn, stack);
+    return new GEMALTO_CINTERION_CellularContext(at, this, apn, cp_req, nonip_req);
 }
 
 nsapi_error_t GEMALTO_CINTERION::init_module(FileHandle *fh)

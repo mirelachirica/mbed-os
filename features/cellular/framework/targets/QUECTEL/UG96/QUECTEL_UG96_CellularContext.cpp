@@ -18,8 +18,7 @@
 
 namespace mbed {
 
-QUECTEL_UG96_CellularContext::QUECTEL_UG96_CellularContext(ATHandler &at, CellularDevice *device, const char *apn,
-        nsapi_ip_stack_t stack) : AT_CellularContext(at, device, apn, stack)
+QUECTEL_UG96_CellularContext::QUECTEL_UG96_CellularContext(ATHandler &at, CellularDevice *device, const char *apn, bool cp_req, bool nonip_req) : AT_CellularContext(at, device, apn, cp_req, nonip_req)
 {
 }
 
@@ -27,9 +26,9 @@ QUECTEL_UG96_CellularContext::~QUECTEL_UG96_CellularContext()
 {
 }
 
-bool QUECTEL_UG96_CellularContext::stack_type_supported(nsapi_ip_stack_t requested_stack)
+bool QUECTEL_UG96_CellularContext::pdp_type_supported(pdp_type_t pdp_type)
 {
-    return requested_stack == IPV4_STACK ? true : false;
+    return pdp_type == IPV4_PDP_TYPE ? true : false;
 }
 
 nsapi_error_t QUECTEL_UG96_CellularContext::do_user_authentication()

@@ -24,7 +24,7 @@ AT_CellularContext::AT_CellularContext(ATHandler &at, CellularDevice *device, co
         _current_op(OP_INVALID), _device(device), _nw(0), _fh(0)
 {
     _stack = NULL;
-    _ip_stack_type = DEFAULT_STACK;
+    _pdp_type = DEFAULT_STACK;
     _authentication_type = CellularContext::CHAP;
     _connect_status = NSAPI_STATUS_DISCONNECTED;
     _is_context_active = false;
@@ -115,17 +115,17 @@ void AT_CellularContext::set_apn_credentials(const char* apn, const char *uname,
 {
 }
 
-bool AT_CellularContext::stack_type_supported(nsapi_ip_stack_t stack_type)
+bool AT_CellularContext::pdp_type_supported(nsapi_ip_stack_t stack_type)
 {
     return true;
 }
 
-nsapi_ip_stack_t AT_CellularContext::get_stack_type()
+nsapi_ip_stack_t AT_CellularContext::get_pdp_type()
 {
     return IPV4V6_STACK;
 }
 
-nsapi_ip_stack_t AT_CellularContext::string_to_stack_type(const char *pdp_type)
+nsapi_ip_stack_t AT_CellularContext::string_to_pdp_type(const char *pdp_type)
 {
     return IPV4V6_STACK;
 }

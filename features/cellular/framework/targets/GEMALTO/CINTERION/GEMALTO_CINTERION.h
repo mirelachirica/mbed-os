@@ -30,7 +30,7 @@ public:
 
 protected: // AT_CellularDevice
     virtual AT_CellularNetwork *open_network_impl(ATHandler &at);
-    virtual AT_CellularContext *create_context_impl(ATHandler &at, const char *apn);
+    virtual AT_CellularContext *create_context_impl(ATHandler &at, const char *apn, bool cp_req = false, bool nonip_req = false);
 public:
     virtual nsapi_error_t init_module();
     virtual uint16_t get_send_delay() const;

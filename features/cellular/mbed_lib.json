@@ -3,7 +3,7 @@
     "config": {
         "use-apn-lookup": {
             "help": "Use APN database lookup",
-            "value": true
+            "value": false
         },
         "random_max_start_delay": {
             "help": "Maximum random delay value used in start-up sequence in milliseconds",

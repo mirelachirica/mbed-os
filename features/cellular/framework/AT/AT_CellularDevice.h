@@ -41,7 +41,7 @@ public:
     AT_CellularDevice(FileHandle *fh);
     virtual ~AT_CellularDevice();
 
-    virtual CellularContext *create_context(FileHandle *fh = NULL, const char *apn = NULL);
+    virtual CellularContext *create_context(FileHandle *fh = NULL, const char *apn = NULL, bool cp_req = false, bool nonip_req = false);
     virtual void delete_context(CellularContext *context);
 
     virtual CellularNetwork *open_network(FileHandle *fh = NULL);
@@ -89,7 +89,7 @@ public:
      *  @return         new instance of class AT_CellularContext
      *
      */
-    virtual AT_CellularContext *create_context_impl(ATHandler &at, const char *apn);
+    virtual AT_CellularContext *create_context_impl(ATHandler &at, const char *apn, bool cp_req = false, bool nonip_req = false);
 
     /** Create new instance of AT_CellularNetwork or if overridden, modem specific implementation.
      *

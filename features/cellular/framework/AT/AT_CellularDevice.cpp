@@ -129,11 +129,11 @@ CellularContext *AT_CellularDevice::get_context_list() const
     return _context_list;
 }
 
-CellularContext *AT_CellularDevice::create_context(FileHandle *fh, const char *apn)
+CellularContext *AT_CellularDevice::create_context(FileHandle *fh, const char *apn, bool cp_req, bool nonip_req)
 {
     ATHandler *atHandler = get_at_handler(fh);
     if (atHandler) {
-        AT_CellularContext *ctx = create_context_impl(*atHandler, apn);
+        AT_CellularContext *ctx = create_context_impl(*atHandler, apn, cp_req, nonip_req);
         AT_CellularContext* curr = _context_list;
 
         if (_context_list == NULL) {
@@ -153,9 +153,12 @@ CellularContext *AT_CellularDevice::create_context(FileHandle *fh, const char *a
     return NULL;
 }
 
-AT_CellularContext *AT_CellularDevice::create_context_impl(ATHandler &at, const char *apn)
+AT_CellularContext *AT_CellularDevice::create_context_impl(ATHandler &at, const char *apn, bool cp_req, bool nonip_req)
 {
-    return new AT_CellularContext(at, this, apn);
+    if (cp_req) {
+
+    }
+    return new AT_CellularContext(at, this, apn, cp_req, nonip_req);
 }
 
 void AT_CellularDevice::delete_context(CellularContext *context)

@@ -23,11 +23,11 @@ namespace mbed {
 
 class TELIT_HE910_CellularContext: public AT_CellularContext {
 public:
-    TELIT_HE910_CellularContext(ATHandler &at, CellularDevice *device, const char *apn);
+    TELIT_HE910_CellularContext(ATHandler &at, CellularDevice *device, const char *apn, bool cp_req = false, bool nonip_req = false);
     virtual ~TELIT_HE910_CellularContext();
 
 protected:
-    virtual bool stack_type_supported(nsapi_ip_stack_t stack_type);
+    virtual bool pdp_type_supported(pdp_type_t pdp_type);
 };
 
 } /* namespace mbed */

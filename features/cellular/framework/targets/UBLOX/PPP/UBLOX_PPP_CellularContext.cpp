@@ -18,8 +18,8 @@
 
 namespace mbed {
 
-UBLOX_PPP_CellularContext::UBLOX_PPP_CellularContext(ATHandler &at, CellularDevice *device, const char *apn) :
-        AT_CellularContext(at, device, apn)
+UBLOX_PPP_CellularContext::UBLOX_PPP_CellularContext(ATHandler &at, CellularDevice *device, const char *apn, bool cp_req, bool nonip_req) :
+         AT_CellularContext(at, device, apn, cp_req, nonip_req)
 {
 }
 
@@ -27,9 +27,9 @@ UBLOX_PPP_CellularContext::~UBLOX_PPP_CellularContext()
 {
 }
 
-bool UBLOX_PPP_CellularContext::stack_type_supported(nsapi_ip_stack_t stack_type)
+bool UBLOX_PPP_CellularContext::pdp_type_supported(pdp_type_t pdp_type)
 {
-    return stack_type == IPV4_STACK ? true : false;
+    return pdp_type == IPV4_PDP_TYPE ? true : false;
 }
 
 } /* namespace mbed */

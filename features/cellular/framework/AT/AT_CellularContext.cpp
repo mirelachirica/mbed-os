@@ -932,23 +932,23 @@ ControlPlane_netif *AT_CellularContext::get_cp_netif()
 nsapi_error_t AT_CellularContext::setup_control_plane_opt()
 {
     // check if control plane optimization already set
-    /*mbed::CellularNetwork::CIoT_Supported_Opt supported_network_opt;
+    mbed::CellularNetwork::CIoT_Supported_Opt supported_network_opt;
 
     if (_nw->get_ciot_network_optimization_config(supported_network_opt)) {
         return NSAPI_ERROR_DEVICE_ERROR;
     }
 
-    if (supported_network_opt == mbed::CellularNetwork::SUPPORTED_UE_OPT_CONTROL_PLANE ||
-        supported_network_opt == mbed::CellularNetwork::SUPPORTED_UE_OPT_BOTH) {
+    if (supported_network_opt == mbed::CellularNetwork::CIOT_OPT_CONTROL_PLANE ||
+        supported_network_opt == mbed::CellularNetwork::CIOT_OPT_BOTH) {
         _cp_in_use = true;
         return NSAPI_ERROR_OK;
-    }*/
+    }
 
     // ciot optimization not set by app so need to set it now
     nsapi_error_t ciot_opt_ret;
-    ciot_opt_ret = _nw->set_ciot_optimization_config(mbed::CellularNetwork::SUPPORTED_UE_OPT_CONTROL_PLANE,
-                   mbed::CellularNetwork::PREFERRED_UE_OPT_CONTROL_PLANE
-                   /*ciot_opt_cb*/);
+    ciot_opt_ret = _nw->set_ciot_optimization_config(mbed::CellularNetwork::CIOT_OPT_CONTROL_PLANE,
+                   mbed::CellularNetwork::PREFERRED_UE_OPT_CONTROL_PLANE,
+                   callback(this, &AT_CellularContext::ciot_opt_cb));
 
     if (ciot_opt_ret != NSAPI_ERROR_OK) {
         return ciot_opt_ret;
@@ -964,10 +964,10 @@ nsapi_error_t AT_CellularContext::setup_control_plane_opt()
     return NSAPI_ERROR_DEVICE_ERROR;
 }
 
-void AT_CellularContext::ciot_opt_cb(mbed::CellularNetwork::Supported_UE_Opt ciot_opt)
+void AT_CellularContext::ciot_opt_cb(mbed::CellularNetwork::CIoT_Supported_Opt ciot_opt)
 {
-    if (ciot_opt == mbed::CellularNetwork::SUPPORTED_UE_OPT_CONTROL_PLANE ||
-        ciot_opt == mbed::CellularNetwork::SUPPORTED_UE_OPT_BOTH) {
+    if (ciot_opt == mbed::CellularNetwork::CIOT_OPT_CONTROL_PLANE ||
+        ciot_opt == mbed::CellularNetwork::CIOT_OPT_BOTH) {
         _cp_in_use = true;
     }
     _cp_opt_semaphore.release();

@@ -120,7 +120,7 @@ private:
     pdp_type_t string_to_pdp_type(const char *pdp_type);
     pdp_type_t get_pdp_type();
     nsapi_error_t check_operation(nsapi_error_t err, ContextOperation op);
-    void ciot_opt_cb(mbed::CellularNetwork::Supported_UE_Opt ciot_opt);
+    void ciot_opt_cb(mbed::CellularNetwork::CIoT_Supported_Opt ciot_opt);
 
 private:
     pdp_type_t _ip_pdp_type_requested;

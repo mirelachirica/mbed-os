@@ -58,6 +58,7 @@ private:
         STATE_POWER_ON,
         STATE_DEVICE_READY,
         STATE_SIM_PIN,
+        STATE_CONTROL_PLANE_OPT,
         STATE_REGISTERING_NETWORK,
         STATE_MANUAL_REGISTERING_NETWORK,
         STATE_ATTACHING_NETWORK,
@@ -146,6 +147,7 @@ private:
     void state_power_on();
     void state_device_ready();
     void state_sim_pin();
+    void state_control_plane_opt();
     void state_registering();
     void state_manual_registering_network();
     void state_attaching();
@@ -158,6 +160,7 @@ private:
     void device_ready_cb();
     void pre_event(CellularState state);
     bool check_is_target_reached();
+    void setup_control_plane_opt(bool on = true);
 
     CellularDevice &_cellularDevice;
     CellularState _state;
@@ -187,6 +190,8 @@ private:
     nsapi_event_t _current_event;
     bool _active_context; // Is there any active context?
     PlatformMutex _mutex;
+
+    bool _cp_req;
 };
 
 } // namespace

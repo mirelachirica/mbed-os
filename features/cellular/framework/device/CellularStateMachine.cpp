@@ -47,7 +47,7 @@ CellularStateMachine::CellularStateMachine(CellularDevice &device, events::Event
     _event_status_cb(0), _network(0), _power(0), _queue(queue), _queue_thread(0), _sim_pin(0),
     _retry_count(0), _event_timeout(-1), _event_id(-1), _plmn(0), _command_success(false),
     _plmn_network_found(false), _is_retry(false), _cb_data(), _current_event(NSAPI_EVENT_CONNECTION_STATUS_CHANGE),
-    _active_context(false)
+    _active_context(false), _cp_req(false)
 {
 #if MBED_CONF_CELLULAR_RANDOM_MAX_START_DELAY == 0
     _start_time = 0;
@@ -428,14 +428,24 @@ void CellularStateMachine::state_sim_pin()
 
         _active_context = false;
         _active_context = _network->is_active_context(); // check if context was already activated
-        if (_plmn) {
-            enter_to_state(STATE_MANUAL_REGISTERING_NETWORK);
+
+        if (_cp_req) {
+            enter_to_state(STATE_CONTROL_PLANE_OPT);
         } else {
-            enter_to_state(STATE_REGISTERING_NETWORK);
+            if (_plmn) {
+                enter_to_state(STATE_MANUAL_REGISTERING_NETWORK);
+            } else {
+                enter_to_state(STATE_REGISTERING_NETWORK);
+            }
         }
     } else {
         retry_state_or_fail();
     }
+}
+
+void CellularStateMachine::state_control_plane_opt()
+{
+    retry_state_or_fail();
 }
 
 void CellularStateMachine::state_registering()
@@ -608,6 +618,10 @@ void CellularStateMachine::event()
             _current_event = (nsapi_event_t)CellularSIMStatusChanged;
             state_sim_pin();
             break;
+        case STATE_CONTROL_PLANE_OPT:
+            _current_event = (nsapi_event_t)CellularCIoTOptimisationConfig;
+            state_control_plane_opt();
+            break;
         case STATE_REGISTERING_NETWORK:
             _current_event = (nsapi_event_t)CellularRegistrationStatusChanged;
             state_registering();
@@ -710,6 +724,15 @@ void CellularStateMachine::cellular_event_changed(nsapi_event_t ev, intptr_t ptr
                 }
             }
         }
+    } else if ((cellular_connection_status_t)ev == CellularCIoTOptimisationConfig) {
+        _queue.cancel(_event_id);
+        _is_retry = false;
+        _event_id = -1;
+        if (_plmn) {
+            enter_to_state(STATE_MANUAL_REGISTERING_NETWORK);
+        } else {
+            enter_to_state(STATE_REGISTERING_NETWORK);
+        }
     }
 }
 
@@ -742,6 +765,11 @@ void CellularStateMachine::set_retry_timeout_array(const uint16_t timeout[], int
     for (int i = 0; i < _retry_array_length; i++) {
         _retry_timeout_array[i] = timeout[i];
     }
+}
+
+void CellularStateMachine::setup_control_plane_opt(bool on)
+{
+    _cp_req = on;
 }
 
 } // namespace

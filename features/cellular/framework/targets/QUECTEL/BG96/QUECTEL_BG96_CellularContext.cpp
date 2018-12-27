@@ -182,12 +182,17 @@ nsapi_error_t QUECTEL_BG96_CellularContext::setup_control_plane_opt()
     _at.resp_start();
     _at.resp_stop();
 
+    cell_callback_data_t data;
+    data.error = _at.get_last_error();
+
     if (_at.get_last_error() == NSAPI_ERROR_OK) {
-        _cp_in_use = true;
         if (_nonip_req) {
             _pdp_type = NON_IP_PDP_TYPE;
         }
+        data.status_data = mbed::CellularNetwork::CIOT_OPT_CONTROL_PLANE;
     }
+
+    device_cellular_callback((nsapi_event_t)CellularCIoTOptimisationConfig, (intptr_t)&data);
 
     return _at.unlock_return_error();
 }

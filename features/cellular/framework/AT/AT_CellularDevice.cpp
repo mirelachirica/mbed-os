@@ -212,6 +212,8 @@ CellularContext *AT_CellularDevice::create_context(UARTSerial *serial, const cha
 
 CellularContext *AT_CellularDevice::create_context(FileHandle *fh, const char *apn, bool cp_req, bool nonip_req)
 {
+    set_cp_opt_to_state_machine(cp_req);
+
     AT_CellularContext *ctx = create_context_impl(*get_at_handler(fh), apn, cp_req, nonip_req);
     AT_CellularContext *curr = _context_list;
 

@@ -450,8 +450,16 @@ void AT_CellularNetwork::urc_cciotopti()
 {
     _supported_network_opt = (CIoT_Supported_Opt)_at.read_int();
 
+// could be removed all together
     if (_ciotopt_network_support_cb) {
         _ciotopt_network_support_cb(_supported_network_opt);
+    }
+
+    if (_connection_status_cb) {
+        cell_callback_data_t data;
+        data.error = _at.get_last_error();
+        data.status_data = _supported_network_opt;
+        _connection_status_cb((nsapi_event_t)CellularCIoTOptimisationConfig, (intptr_t)&data);
     }
 }
 

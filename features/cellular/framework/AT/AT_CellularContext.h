@@ -115,22 +115,26 @@ private:
     pdp_type_t string_to_pdp_type(const char *pdp_type);
     nsapi_error_t check_operation(nsapi_error_t err, ContextOperation op);
     AT_CellularBase::CellularProperty pdp_type_t_to_cellular_property(pdp_type_t pdp_type);
-    void ciot_opt_cb(mbed::CellularNetwork::CIoT_Supported_Opt ciot_opt);
 
 private:
     bool _is_connected;
     bool _is_blocking;
     ContextOperation  _current_op;
     char _found_apn[MAX_APN_LENGTH];
-    CellularDevice *_device;
     CellularNetwork *_nw;
     FileHandle *_fh;
     rtos::Semaphore _semaphore;
     rtos::Semaphore _cp_opt_semaphore;
 
 protected:
+
+    void device_cellular_callback(nsapi_event_t ev, intptr_t ptr);
+
+    CellularDevice *_device;
+
     // flag indicating if CP was requested to be setup
     bool _cp_req;
+
     // flag indicating if Non-IP context was requested to be setup
     bool _nonip_req;
 

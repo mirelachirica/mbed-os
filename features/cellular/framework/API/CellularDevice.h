@@ -342,6 +342,8 @@ protected:
      */
     void cellular_callback(nsapi_event_t ev, intptr_t ptr);
 
+    void set_cp_opt_to_state_machine(bool cp_req);
+
     int _network_ref_count;
     int _sms_ref_count;
     int _power_ref_count;

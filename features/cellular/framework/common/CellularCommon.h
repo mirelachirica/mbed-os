@@ -49,6 +49,7 @@ typedef enum cellular_event_status {
     CellularRadioAccessTechnologyChanged    = NSAPI_EVENT_CELLULAR_STATUS_BASE + 5, /* Network roaming status have changed. cell_callback_data_t.status_data will be enum RadioAccessTechnology See enum RadioAccessTechnology in ../API/CellularNetwork.h*/
     CellularAttachNetwork                   = NSAPI_EVENT_CELLULAR_STATUS_BASE + 6, /* cell_callback_data_t.status_data will be enum AttachStatus. See enum AttachStatus in ../API/CellularNetwork.h */
     CellularActivatePDPContext              = NSAPI_EVENT_CELLULAR_STATUS_BASE + 7, /* NSAPI_ERROR_OK in cell_callback_data_t.error on successfully PDP Context activated or negative error */
+    CellularCIoTOptimisationConfig          = NSAPI_EVENT_CELLULAR_STATUS_BASE + 8, /*  */
 } cellular_connection_status_t;
 
 #endif // CELLULAR_COMMON_

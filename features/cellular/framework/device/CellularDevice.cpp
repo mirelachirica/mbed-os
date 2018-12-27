@@ -173,7 +173,7 @@ void CellularDevice::cellular_callback(nsapi_event_t ev, intptr_t ptr)
         cell_callback_data_t *ptr_data = (cell_callback_data_t *)ptr;
         tr_debug("callback: %d, err: %d, data: %d", ev, ptr_data->error, ptr_data->status_data);
         cellular_connection_status_t cell_ev = (cellular_connection_status_t)ev;
-        if (cell_ev == CellularRegistrationStatusChanged && _state_machine) {
+        if ((cell_ev == CellularRegistrationStatusChanged || cell_ev == CellularCIoTOptimisationConfig) && _state_machine) {
             // broadcast only network registration changes to state machine
             _state_machine->cellular_event_changed(ev, ptr);
         }
@@ -224,6 +224,11 @@ nsapi_error_t CellularDevice::shutdown()
         curr = (CellularContext *)curr->_next;
     }
     return NSAPI_ERROR_OK;
+}
+
+void CellularDevice::set_cp_opt_to_state_machine(bool cp_req)
+{
+    _state_machine->setup_control_plane_opt(cp_req);
 }
 
 } // namespace mbed

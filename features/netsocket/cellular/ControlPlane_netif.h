@@ -30,6 +30,10 @@ public:
     ControlPlane_netif() {}
     virtual ~ControlPlane_netif() {}
 
+protected:
+    friend class CellularNonIPSocket;
+    friend class CellularContext;
+
     /** Send data over cellular control plane
     *
     *  @param cpdata            Buffer of data to be sent over control plane connection
@@ -46,7 +50,19 @@ public:
     *  @return                  Number of received bytes on success, negative error
     *                           code on failure.
     */
+
     virtual nsapi_size_or_error_t recv(void *cpdata, nsapi_size_t cpdata_length) = 0;
+
+    /** Receives data from the control plane PDP context
+    *
+    *  This function is called by cellular PDP context when data
+    *  is received from network. It will invoke the callback set
+    *  by the above attach.
+    *
+    *  @param buffer     Buffer containing received data
+    *  @param size       Size of data in bytes
+    */
+    virtual void data_received() = 0;
 
     /** Register a callback on state change of the socket
     *
@@ -61,17 +77,6 @@ public:
     *  @param data         Argument to pass to callback
     */
     virtual void attach(void (*callback)(void *), void *data) = 0;
-
-    /** Receives data from the control plane PDP context
-    *
-    *  This function is called by cellular PDP context when data
-    *  is received from network. It will invoke the callback set
-    *  by the above attach.
-    *
-    *  @param buffer     Buffer containing received data
-    *  @param size       Size of data in bytes
-    */
-    virtual void data_received() = 0;
 };
 
 } // mbed namespace

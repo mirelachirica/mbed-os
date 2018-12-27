@@ -261,6 +261,8 @@ protected: // Device specific implementations might need these so protected
      */
     virtual void enable_hup(bool enable) = 0;
 
+    void cp_data_received();
+
     // member variables needed in target override methods
     NetworkStack *_stack; // must be pointer because of PPP
     pdp_type_t _pdp_type;
@@ -277,6 +279,8 @@ protected: // Device specific implementations might need these so protected
     const char *_pwd;
     PinName _dcd_pin;
     bool _active_high;
+
+    ControlPlane_netif *_cp_netif;
 };
 
 } // namespace mbed

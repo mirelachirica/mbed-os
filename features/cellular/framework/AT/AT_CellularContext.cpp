@@ -76,6 +76,10 @@ AT_CellularContext::~AT_CellularContext()
     if (_nw) {
         _device->close_network();
     }
+
+    if (_cp_netif) {
+        delete _cp_netif;
+    }
 }
 
 void AT_CellularContext::set_file_handle(FileHandle *fh)

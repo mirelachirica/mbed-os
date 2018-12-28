@@ -39,12 +39,9 @@ public:
     */
     virtual ~CellularNonIPSocket();
 
-    /** Creates and opens a socket on the given cellular context.
-    *
-    *  @param cellular_context     Cellular PDP context over which this socket
-    *                              is sending and receiving data.
+    /** Creates a socket.
     */
-    CellularNonIPSocket(mbed::CellularContext *cellular_context);
+    CellularNonIPSocket();
 
     /** Opens a socket on the given cellular context.
     *
@@ -126,7 +123,6 @@ public:
     virtual nsapi_error_t bind(const SocketAddress &address);
 
 protected:
-    CellularNonIPSocket();
     virtual void event();
 
     uint32_t _timeout;

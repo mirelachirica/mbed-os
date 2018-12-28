@@ -21,17 +21,19 @@
 
 using namespace mbed;
 
-CellularNonIPSocket::CellularNonIPSocket(CellularContext *cellular_context)
+CellularNonIPSocket::CellularNonIPSocket()
     : _timeout(osWaitForever),
       _readers(0), _writers(0), _pending(0),
       _cp_netif(NULL),
       _opened(false)
-{
-    open(cellular_context);
-}
+{}
 
 nsapi_error_t CellularNonIPSocket::open(CellularContext *cellular_context)
 {
+    if (cellular_context == NULL) {
+        return NSAPI_ERROR_PARAMETER;
+    }
+
     return open(cellular_context->get_cp_netif());
 }
 
@@ -42,10 +44,6 @@ CellularNonIPSocket::~CellularNonIPSocket()
 
 nsapi_error_t CellularNonIPSocket::open(ControlPlane_netif *cp_netif)
 {
-    if (_opened) {
-        return NSAPI_ERROR_OK;
-    }
-
     _lock.lock();
 
     if (_cp_netif != NULL || cp_netif == NULL) {

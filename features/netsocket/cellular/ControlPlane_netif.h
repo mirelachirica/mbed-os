@@ -19,12 +19,21 @@
 
 #include "nsapi_types.h"
 
+/** @file ControlPlane_netif.h
+ * @brief Implements support for data transfer using Control Plane CIoT EPS optimisation.
+ *
+ */
+
 namespace mbed {
 
 /* Length of the buffer storing data received over control plane */
 #define MAX_CP_DATA_RECV_LEN 2048
 
 // TODO: need to make this l3ip compatible
+
+/** Implements support for data transfer using
+ *  Control Plane CIoT EPS optimisation specified in 3GPP 23.401(4.10), 3GPP 23.682(4.5.14).
+ */
 class ControlPlane_netif {
 public:
     ControlPlane_netif() {}
@@ -58,8 +67,6 @@ protected:
     *  is received from network. It will invoke the callback set
     *  by the above attach.
     *
-    *  @param buffer     Buffer containing received data
-    *  @param size       Size of data in bytes
     */
     virtual void data_received() = 0;
 

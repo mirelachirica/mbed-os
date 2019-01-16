@@ -23,6 +23,10 @@
 #include "Callback.h"
 #include "UARTSerial.h"
 
+/** @file CellularDevice.h
+ * @brief Class CellularDevice
+ *
+ */
 namespace mbed {
 
 class CellularPower;

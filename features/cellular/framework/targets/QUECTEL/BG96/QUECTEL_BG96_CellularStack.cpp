@@ -239,6 +239,10 @@ nsapi_error_t QUECTEL_BG96_CellularStack::create_socket_impl(CellularSocket *soc
 nsapi_size_or_error_t QUECTEL_BG96_CellularStack::socket_sendto_impl(CellularSocket *socket, const SocketAddress &address,
                                                                      const void *data, nsapi_size_t size)
 {
+    if (!size && socket->proto == NSAPI_UDP) {
+        return NSAPI_ERROR_UNSUPPORTED;
+    }
+
     int sent_len = 0;
     int sent_len_before = 0;
     int sent_len_after = 0;

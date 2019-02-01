@@ -1009,10 +1009,33 @@ void ATHandler::resp_stop()
         information_response_stop();
     }
 
-    // Go for response stop_tag
-    if (consume_to_stop_tag()) {
-        set_scope(NotSet);
+    if (_stop_tag && !_stop_tag->found && !_error_found) {
+        // Go for response stop_tag but check for URC for every new line
+        while (!get_last_error()) {
+
+            if (match(_stop_tag->tag, _stop_tag->len)) {
+                break;
+            }
+
+            if (match_urc()) {
+                continue;
+            }
+
+            // If no URC nor OK found, look for CRLF and consume everything up to and including CRLF
+            if (mem_str(_recv_buff, _recv_len, CRLF, CRLF_LENGTH)) {
+                consume_to_tag(CRLF, true);
+            // If no URC nor OK nor CRLF -> fill buffer
+            } else {
+                if (!fill_buffer()) {
+                    // if we don't get any match and no data within timeout, set an error to indicate need for recovery
+                    set_error(NSAPI_ERROR_DEVICE_ERROR);
+                }
+            }
+        }
     }
+
+
+    set_scope(NotSet);
 
     // Restore stop tag to OK
     set_tag(&_resp_stop, OK);

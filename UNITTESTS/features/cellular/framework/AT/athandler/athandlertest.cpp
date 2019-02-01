@@ -1049,6 +1049,20 @@ TEST_F(TestATHandler, test_ATHandler_resp_start)
     EXPECT_TRUE(!strncmp(buf, "\r\n", 2));
     // Consume to delimiter or stop_tag OKCRLF fails -> ERROR
     EXPECT_TRUE(at.get_last_error() == NSAPI_ERROR_DEVICE_ERROR);
+    at.resp_stop();
+
+    char table14[] = "\r\n3G:\r\n10588,428,-6.5,-111,---,---,AN,65425\r\n10564,504,-\r\n\r\nOK\r\n";
+    at.flush();
+    at.clear_error();
+    filehandle_stub_table = table14;
+    filehandle_stub_table_pos = 0;
+
+    while (at.info_resp())
+    {
+
+    }
+
+     at.flush();
 }
 
 TEST_F(TestATHandler, test_ATHandler_resp_stop)

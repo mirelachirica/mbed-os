@@ -897,7 +897,11 @@ bool ATHandler::info_resp()
         information_response_stop();
     }
 
-    resp(_info_resp_prefix, false);
+    if (strlen(_info_resp_prefix)) {
+        resp(_info_resp_prefix, false);
+    } else {
+        resp(NULL, false);
+    }
 
     if (_prefix_matched) {
         set_scope(InfoType);

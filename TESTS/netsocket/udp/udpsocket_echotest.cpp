@@ -39,6 +39,8 @@ UDPSocket sock;
 Semaphore tx_sem(0, 1);
 EventFlags signals;
 
+events::EventQueue *event_queue;
+
 static const int BUFF_SIZE = 1200;
 char rx_buffer[BUFF_SIZE] = {0};
 char tx_buffer[BUFF_SIZE] = {0};
@@ -52,9 +54,17 @@ Timer tc_exec_time;
 int time_allotted;
 }
 
+void udpsocket_echotest_nonblock_receiver();
+
 static void _sigio_handler()
 {
     signals.set(SIGNAL_SIGIO_RX | SIGNAL_SIGIO_TX);
+
+    if (event_queue != NULL) {
+        event_queue->call(udpsocket_echotest_nonblock_receiver);
+    } else {
+        TEST_FAIL_MESSAGE("_sigio_handler running when event_queue is NULL");
+    }
 }
 
 void UDPSOCKET_ECHOTEST()
@@ -159,14 +169,24 @@ void UDPSOCKET_ECHOTEST_NONBLOCK()
     unsigned char *stack_mem = (unsigned char *)malloc(OS_STACK_SIZE);
     TEST_ASSERT_NOT_NULL(stack_mem);
 
-    for (int pkt_s = pkt_sizes[s_idx]; s_idx < PKTS; ++s_idx) {
-        pkt_s = pkt_sizes[s_idx];
+    EventQueue queue(2 * EVENTS_EVENT_SIZE);
+    event_queue = &queue;
 
-        thread = new Thread(osPriorityNormal,
+    thread = new Thread(osPriorityNormal,
                             OS_STACK_SIZE,
                             stack_mem,
                             "receiver");
-        TEST_ASSERT_EQUAL(osOK, thread->start(callback(udpsocket_echotest_nonblock_receiver, &pkt_s)));
+    TEST_ASSERT_EQUAL(osOK, thread->start(callback(&queue, &EventQueue::dispatch_forever)));
+
+
+    for (int pkt_s = pkt_sizes[s_idx]; s_idx < PKTS; ++s_idx) {
+        pkt_s = pkt_sizes[s_idx];
+
+//        thread = new Thread(osPriorityNormal,
+//                            OS_STACK_SIZE,
+//                            stack_mem,
+//                            "receiver");
+//        TEST_ASSERT_EQUAL(osOK, thread->start(callback(udpsocket_echotest_nonblock_receiver, &pkt_s)));
 
         for (int retry_cnt = 0; retry_cnt <= RETRIES; retry_cnt++) {
             fill_tx_buffer_ascii(tx_buffer, pkt_s);

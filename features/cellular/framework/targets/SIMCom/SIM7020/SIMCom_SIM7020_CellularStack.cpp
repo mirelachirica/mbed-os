@@ -25,11 +25,12 @@
 
 using namespace mbed;
 
+uint8_t SIMCom_SIM7020_CellularStack::_rx_buffer[] = {0};
 SIMCom_SIM7020_CellularStack::SIMCom_SIM7020_CellularStack(ATHandler       &atHandler,
                                                            int              cid,
                                                            nsapi_ip_stack_t stack_type) :
-                                                           AT_CellularStack(atHandler, cid, stack_type),
-                                                           _rx_buffer(NULL)
+                                                           AT_CellularStack(atHandler, cid, stack_type)/*,
+                                                           _rx_buffer(NULL)*/
 {
     _at.set_urc_handler("+CSONMI:", mbed::Callback<void()>(this, &SIMCom_SIM7020_CellularStack::urc_csonmi));
 }
@@ -100,12 +101,15 @@ void SIMCom_SIM7020_CellularStack::urc_csonmi()
                 tr_debug("sock->id: %d\n", static_cast<int>(sock->id));
                 if (sock->_cb != NULL) {
                     const nsapi_size_t pending_bytes = _at.read_int();
-                    MBED_ASSERT(_rx_buffer == NULL);
+//                    MBED_ASSERT(_rx_buffer == NULL);
+MBED_ASSERT((pending_bytes / 2) <= sizeof(_rx_buffer));
 #if 0
                     _rx_buffer                   = new uint8_t[pending_bytes / 2];
 #endif
+#if 0
 _rx_buffer = (uint8_t*)malloc(pending_bytes / 2);
 MBED_ASSERT(_rx_buffer != NULL);
+#endif 
 
                     const ssize_t read_bytes_err = _at.read_hex_string((char *)_rx_buffer, pending_bytes);
                     // Store rx context to socket to be accessed later in @ref socket_recvfrom_impl
@@ -210,7 +214,9 @@ nsapi_size_or_error_t SIMCom_SIM7020_CellularStack::socket_sendto_impl(CellularS
                                                                        const void          *data,
                                                                        nsapi_size_t         size)
 {
-    char *hexstr;
+    static char hexstr[MAX_SEND_SIZE * 2 + 1] = {0};
+    
+//    char *hexstr;
     int   hexlen;
 
     if (size > MAX_SEND_SIZE) {
@@ -280,8 +286,10 @@ nsapi_size_or_error_t SIMCom_SIM7020_CellularStack::socket_sendto_impl(CellularS
             // Tx sequence.
 
 //            hexstr         = new char[size * 2 + 1];
+#if 0
             hexstr         = (char*)malloc(size * 2 + 1);
             MBED_ASSERT(hexstr != NULL);
+#endif             
             hexlen         = mbed_cellular_util::char_str_to_hex_str((const char *)data, size, hexstr);
             hexstr[hexlen] = 0;
 
@@ -292,7 +300,9 @@ nsapi_size_or_error_t SIMCom_SIM7020_CellularStack::socket_sendto_impl(CellularS
             _at.cmd_stop();
 
 //            delete [] hexstr;
+#if 0
             free(hexstr);
+#endif            
 
             if (_at.get_last_error() != NSAPI_ERROR_OK)  {
                 return NSAPI_ERROR_DEVICE_ERROR;
@@ -302,7 +312,8 @@ nsapi_size_or_error_t SIMCom_SIM7020_CellularStack::socket_sendto_impl(CellularS
 
             break;
         case NSAPI_TCP:
-
+MBED_ASSERT(false);
+#if 0
             hexstr 		   = new char[size * 2 + 1];
             hexlen 		   = mbed_cellular_util::char_str_to_hex_str((const char *)data, size, hexstr);
             hexstr[hexlen] = 0;
@@ -318,7 +329,7 @@ nsapi_size_or_error_t SIMCom_SIM7020_CellularStack::socket_sendto_impl(CellularS
             if (_at.get_last_error() != NSAPI_ERROR_OK)  {
                 return NSAPI_ERROR_DEVICE_ERROR;
             }
-
+#endif 
             return size;
 
             break;
@@ -352,9 +363,11 @@ nsapi_size_or_error_t SIMCom_SIM7020_CellularStack::socket_recvfrom_impl(Cellula
 #if 0
     delete[] _rx_buffer;
 #endif  // 0
+#if 0
 free(_rx_buffer);
 
 	_rx_buffer            = NULL;
+#endif     
     socket->pending_bytes = 0;
 
     if (address != NULL) {

@@ -62,7 +62,8 @@ private:
 
     void handle_open_socket_response(int &modem_connect_id, int &err);
     
-    uint8_t      *_rx_buffer;
+//    uint8_t      *_rx_buffer;
+static uint8_t _rx_buffer[512];
     SocketAddress _address;
 };
 } // namespace mbed

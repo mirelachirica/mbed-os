@@ -37,8 +37,13 @@ static const intptr_t cellular_properties[AT_CellularBase::PROPERTY_MAX] = {
     0,  // PROPERTY_NON_IP_PDP_TYPE
 };
 
+#include "mbed.h"
 SIMCom_SIM7020::SIMCom_SIM7020(FileHandle *fh) : AT_CellularDevice(fh)
 {
+    DigitalOut modem_power_on(PE_15);
+    modem_power_on = 1;
+    Thread::wait(10000);
+    
     AT_CellularBase::set_cellular_properties(cellular_properties);
 }
 
@@ -65,15 +70,6 @@ void SIMCom_SIM7020::set_ready_cb(Callback<void()> callback)
 {
     _at->set_urc_handler(DEVICE_READY_URC, callback);
 }
-
-#include "mbed.h"
-nsapi_error_t SIMCom_SIM7020::hard_power_on()
-{
-    DigitalOut modem_power_on(PE_15);
-    modem_power_on = 1;
-    Thread::wait(10000);
-}
-
 
 #if MBED_CONF_SIMCOM_SIM7020_PROVIDE_DEFAULT
 #include "UARTSerial.h"

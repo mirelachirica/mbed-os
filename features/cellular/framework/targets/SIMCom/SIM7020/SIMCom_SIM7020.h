@@ -44,8 +44,6 @@ protected: // AT_CellularDevice
     virtual AT_CellularInformation *open_information_impl(ATHandler &at);
     virtual void set_ready_cb(Callback<void()> callback);
 
-    virtual nsapi_error_t hard_power_on();
-
 public:
     void handle_urc(FileHandle *fh);
 };

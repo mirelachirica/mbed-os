@@ -109,7 +109,7 @@ MBED_ASSERT((pending_bytes / 2) <= sizeof(_rx_buffer));
 #if 0
 _rx_buffer = (uint8_t*)malloc(pending_bytes / 2);
 MBED_ASSERT(_rx_buffer != NULL);
-#endif 
+#endif
 
                     const ssize_t read_bytes_err = _at.read_hex_string((char *)_rx_buffer, pending_bytes);
                     // Store rx context to socket to be accessed later in @ref socket_recvfrom_impl
@@ -215,7 +215,7 @@ nsapi_size_or_error_t SIMCom_SIM7020_CellularStack::socket_sendto_impl(CellularS
                                                                        nsapi_size_t         size)
 {
     static char hexstr[MAX_SEND_SIZE * 2 + 1] = {0};
-    
+
 //    char *hexstr;
     int   hexlen;
 
@@ -229,38 +229,7 @@ nsapi_size_or_error_t SIMCom_SIM7020_CellularStack::socket_sendto_impl(CellularS
         bool    is_address_match;
         bool    is_success;
         case NSAPI_UDP:
-#if 0 // legacy
-            if (!socket->connected) {
-                is_port_match    = (socket->remoteAddress.get_port() == address.get_port());
-                is_address_match = (socket->remoteAddress.get_ip_address() == address.get_ip_address());
-
-                if (!is_port_match || !is_address_match) {
-                    /* No existing connection endpoint setup in the modem for this remote peer, we need to create one
-                       here. */
-
-                    _address = address;
-                    _at.cmd_start("AT+CSOCON=");
-                    _at.write_int(socket->id);
-                    _at.write_int(address.get_port());
-                    _at.write_string(address.get_ip_address());
-                    _at.cmd_stop();
-
-                    _at.resp_start("+CSOCON:");
-                    _at.resp_stop();
-
-                    if (_at.get_last_error() != NSAPI_ERROR_OK)  {
-                        return NSAPI_ERROR_DEVICE_ERROR;
-                    }
-
-                    socket->connected = true;
-                }
-
-            }
-#endif
-            is_port_match    = (socket->remoteAddress.get_port() == address.get_port());
-            is_address_match = (socket->remoteAddress.get_ip_address() == address.get_ip_address());
-
-            if (!is_port_match || !is_address_match) {
+            if (socket->remoteAddress != address) {
                 /* No existing connection endpoint setup in the modem for this remote peer, we need to create one here. */
 
                 _address = address;
@@ -276,11 +245,8 @@ nsapi_size_or_error_t SIMCom_SIM7020_CellularStack::socket_sendto_impl(CellularS
                 if (_at.get_last_error() != NSAPI_ERROR_OK)  {
                     return NSAPI_ERROR_DEVICE_ERROR;
                 }
-#if 0
-                socket->remoteAddress.set_port(address.get_port());
-                is_success = socket->remoteAddress.set_ip_address(address.get_ip_address());
-                MBED_ASSERT(is_success);
-#endif
+
+                socket->remoteAddress = address;
             }
 
             // Tx sequence.
@@ -289,7 +255,7 @@ nsapi_size_or_error_t SIMCom_SIM7020_CellularStack::socket_sendto_impl(CellularS
 #if 0
             hexstr         = (char*)malloc(size * 2 + 1);
             MBED_ASSERT(hexstr != NULL);
-#endif             
+#endif
             hexlen         = mbed_cellular_util::char_str_to_hex_str((const char *)data, size, hexstr);
             hexstr[hexlen] = 0;
 
@@ -302,7 +268,7 @@ nsapi_size_or_error_t SIMCom_SIM7020_CellularStack::socket_sendto_impl(CellularS
 //            delete [] hexstr;
 #if 0
             free(hexstr);
-#endif            
+#endif
 
             if (_at.get_last_error() != NSAPI_ERROR_OK)  {
                 return NSAPI_ERROR_DEVICE_ERROR;
@@ -329,7 +295,7 @@ MBED_ASSERT(false);
             if (_at.get_last_error() != NSAPI_ERROR_OK)  {
                 return NSAPI_ERROR_DEVICE_ERROR;
             }
-#endif 
+#endif
             return size;
 
             break;
@@ -367,7 +333,7 @@ nsapi_size_or_error_t SIMCom_SIM7020_CellularStack::socket_recvfrom_impl(Cellula
 free(_rx_buffer);
 
 	_rx_buffer            = NULL;
-#endif     
+#endif
     socket->pending_bytes = 0;
 
     if (address != NULL) {

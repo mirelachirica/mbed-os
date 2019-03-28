@@ -18,10 +18,10 @@
 #include "SIMCom_SIM7020_CellularStack.h"
 #include "CellularLog.h"
 #include "CellularUtil.h"
-
 #include "stdlib.h"
 
-#define MAX_SOCKET 5
+#define MAX_SOCKET    5
+#define MAX_SEND_SIZE 512
 
 using namespace mbed;
 
@@ -29,15 +29,18 @@ uint8_t SIMCom_SIM7020_CellularStack::_rx_buffer[] = {0};
 SIMCom_SIM7020_CellularStack::SIMCom_SIM7020_CellularStack(ATHandler       &atHandler,
                                                            int              cid,
                                                            nsapi_ip_stack_t stack_type) :
-                                                           AT_CellularStack(atHandler, cid, stack_type)/*,
-                                                           _rx_buffer(NULL)*/
+                                                           AT_CellularStack(atHandler, cid, stack_type)
 {
-    _at.set_urc_handler("+CSONMI:", mbed::Callback<void()>(this, &SIMCom_SIM7020_CellularStack::urc_csonmi));
+    _at.set_urc_handler("+CSONMI:",
+                        mbed::Callback<void()>(this, &SIMCom_SIM7020_CellularStack::urc_csonmi));
+    _at.set_urc_handler("+CSOERR:",
+                        mbed::Callback<void()>(this, &SIMCom_SIM7020_CellularStack::urc_socket_closed));
 }
 
 SIMCom_SIM7020_CellularStack::~SIMCom_SIM7020_CellularStack()
 {
     _at.set_urc_handler("+CSONMI:", NULL);
+    _at.set_urc_handler("+CSOERR:", NULL);
 }
 
 nsapi_error_t SIMCom_SIM7020_CellularStack::socket_listen(nsapi_socket_t handle, int backlog)
@@ -56,7 +59,9 @@ nsapi_error_t SIMCom_SIM7020_CellularStack::socket_connect(nsapi_socket_t handle
 
     if (socket != NULL) {
         if (!socket->created) {
+            _at.lock();
             const nsapi_error_t err = create_socket_impl(socket);
+            _at.unlock();
             if (err != NSAPI_ERROR_OK) {
                 return err;
             }
@@ -70,8 +75,17 @@ nsapi_error_t SIMCom_SIM7020_CellularStack::socket_connect(nsapi_socket_t handle
     _at.write_int(socket->id);
     _at.write_int(address.get_port());
     _at.write_string(address.get_ip_address());
+#if 0
     _at.cmd_stop();
     _at.cmd_stop_read_resp();
+#endif
+    _at.cmd_stop_read_resp();
+#if 0
+                _at.cmd_stop();
+
+                _at.resp_start("+CSOCON:");
+                _at.resp_stop();
+#endif
     _at.unlock();
 
     if (_at.get_last_error() == NSAPI_ERROR_OK) {
@@ -93,25 +107,14 @@ void SIMCom_SIM7020_CellularStack::urc_csonmi()
     int i = 0;
     while (i < get_max_socket_count()) {
         sock = _socket[i];
-#if 0 //hit, not used in other drivers
-        MBED_ASSERT(sock != NULL);
-#endif
         if (sock != NULL) {
             if (sock->id == sock_id) {
                 tr_debug("sock->id: %d\n", static_cast<int>(sock->id));
                 if (sock->_cb != NULL) {
                     const nsapi_size_t pending_bytes = _at.read_int();
-//                    MBED_ASSERT(_rx_buffer == NULL);
-MBED_ASSERT((pending_bytes / 2) <= sizeof(_rx_buffer));
-#if 0
-                    _rx_buffer                   = new uint8_t[pending_bytes / 2];
-#endif
-#if 0
-_rx_buffer = (uint8_t*)malloc(pending_bytes / 2);
-MBED_ASSERT(_rx_buffer != NULL);
-#endif
-
-                    const ssize_t read_bytes_err = _at.read_hex_string((char *)_rx_buffer, pending_bytes);
+                    MBED_ASSERT((pending_bytes / 2) <= sizeof(_rx_buffer));
+                    const ssize_t read_bytes_err = _at.read_hex_string((char *)_rx_buffer,
+                                                                       pending_bytes);
                     // Store rx context to socket to be accessed later in @ref socket_recvfrom_impl
                     sock->pending_bytes = (pending_bytes / 2);
                     MBED_ASSERT(sock->pending_bytes == static_cast<nsapi_size_t>(read_bytes_err));
@@ -122,12 +125,33 @@ MBED_ASSERT(_rx_buffer != NULL);
                 break;
             }
         }
-
         ++i;
     }
-#if 0 //hit, not used in other drivers
-    MBED_ASSERT(i != get_max_socket_count());
-#endif
+}
+
+void SIMCom_SIM7020_CellularStack::urc_socket_closed()
+{
+    const int sock_id = _at.read_int();
+    tr_debug("urc_socket_closed sock id: %d", sock_id);
+    const int err = _at.read_int();
+    tr_debug("urc_socket_closed err: %d", err);
+    MBED_ASSERT(err != 4);
+
+    switch (err) {
+        case 4:
+            break;
+            
+        default:
+            // @todo: 
+            MBED_ASSERT(false);
+            break;
+    }
+    
+    CellularSocket *sock = find_socket(sock_id);
+    if (sock) {
+        tr_info("Socket closed %d", sock_id);
+        sock->closed = true;
+    }
 }
 
 int SIMCom_SIM7020_CellularStack::get_max_socket_count()
@@ -183,20 +207,27 @@ nsapi_error_t SIMCom_SIM7020_CellularStack::create_socket_impl(CellularSocket *s
     _at.resp_start("+CSOC:");
     socket->id = _at.read_int();
     _at.resp_stop();
-
+#if 1
+    const nsapi_error_t err = _at.get_last_error();
+    MBED_ASSERT(err == NSAPI_ERROR_OK);
+    MBED_ASSERT(socket->id >= 0);
+#endif
+#if 0
     const bool is_create_ok = ((_at.get_last_error() == NSAPI_ERROR_OK) &&  (socket->id >= 0));
     if (!is_create_ok) {
-        tr_error("Socket create failed! %d", socket->id);
+        tr_error("Socket create failed %d", socket->id);
 
         return NSAPI_ERROR_NO_SOCKET;
     }
-
+#endif
     // Check for duplicate socket id delivered by modem
     CellularSocket *sock;
     for (unsigned int i = 0; (i < MAX_SOCKET); ++i) {
         sock = _socket[i];
         if (sock != NULL) {
             if (sock->created && (sock->id == socket->id)) {
+                tr_error("Socket create failed: duplicate %d", socket->id);
+MBED_ASSERT(false);
                 return NSAPI_ERROR_NO_SOCKET;
             }
         }
@@ -208,15 +239,12 @@ nsapi_error_t SIMCom_SIM7020_CellularStack::create_socket_impl(CellularSocket *s
     return NSAPI_ERROR_OK;
 }
 
-#define MAX_SEND_SIZE 512
 nsapi_size_or_error_t SIMCom_SIM7020_CellularStack::socket_sendto_impl(CellularSocket      *socket,
                                                                        const SocketAddress &address,
                                                                        const void          *data,
                                                                        nsapi_size_t         size)
 {
     static char hexstr[MAX_SEND_SIZE * 2 + 1] = {0};
-
-//    char *hexstr;
     int   hexlen;
 
     if (size > MAX_SEND_SIZE) {
@@ -224,10 +252,6 @@ nsapi_size_or_error_t SIMCom_SIM7020_CellularStack::socket_sendto_impl(CellularS
     }
 
     switch (socket->proto) {
-        int32_t tx_len;
-        bool    is_port_match;
-        bool    is_address_match;
-        bool    is_success;
         case NSAPI_UDP:
             if (socket->remoteAddress != address) {
                 /* No existing connection endpoint setup in the modem for this remote peer, we need to create one here. */
@@ -278,7 +302,20 @@ nsapi_size_or_error_t SIMCom_SIM7020_CellularStack::socket_sendto_impl(CellularS
 
             break;
         case NSAPI_TCP:
-MBED_ASSERT(false);
+            hexlen         = mbed_cellular_util::char_str_to_hex_str((const char *)data, size, hexstr);
+            hexstr[hexlen] = 0;
+
+            _at.cmd_start("AT+CSOSEND=");
+            _at.write_int(socket->id);
+            _at.write_int(hexlen);
+            _at.write_string(hexstr, false);
+            _at.cmd_stop();
+
+            if (_at.get_last_error() != NSAPI_ERROR_OK)  {
+                return NSAPI_ERROR_DEVICE_ERROR;
+            }
+
+            return size;
 #if 0
             hexstr 		   = new char[size * 2 + 1];
             hexlen 		   = mbed_cellular_util::char_str_to_hex_str((const char *)data, size, hexstr);
@@ -295,9 +332,9 @@ MBED_ASSERT(false);
             if (_at.get_last_error() != NSAPI_ERROR_OK)  {
                 return NSAPI_ERROR_DEVICE_ERROR;
             }
-#endif
-            return size;
 
+            return size;
+#endif
             break;
         default:
             return NSAPI_ERROR_PARAMETER;

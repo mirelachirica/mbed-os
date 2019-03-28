@@ -22,10 +22,6 @@
 
 namespace mbed {
 
-#define BG96_SOCKET_MAX 12
-#define BG96_CREATE_SOCKET_TIMEOUT 150000 //150 seconds
-#define BG96_CLOSE_SOCKET_TIMEOUT 20000 // TCP socket max timeout is >10sec
-
 class SIMCom_SIM7020_CellularStack : public AT_CellularStack {
 public:
     SIMCom_SIM7020_CellularStack(ATHandler &atHandler, int cid, nsapi_ip_stack_t stack_type);
@@ -59,10 +55,10 @@ protected: // AT_CellularStack
 private:
     // URC handlers
     void urc_csonmi();
+    void urc_socket_closed();
 
     void handle_open_socket_response(int &modem_connect_id, int &err);
     
-//    uint8_t      *_rx_buffer;
 static uint8_t _rx_buffer[512];
     SocketAddress _address;
 };

@@ -135,22 +135,25 @@ void SIMCom_SIM7020_CellularStack::urc_socket_closed()
     tr_debug("urc_socket_closed sock id: %d", sock_id);
     const int err = _at.read_int();
     tr_debug("urc_socket_closed err: %d", err);
-    MBED_ASSERT(err != 4);
 
     switch (err) {
+        CellularSocket *sock;
         case 4:
+            sock = find_socket(sock_id);
+            if (sock != NULL) {
+                sock->closed = true;
+
+                if (sock->_cb != NULL) {
+                    sock->_cb(sock->_data);
+                }
+            }
+
             break;
-            
         default:
-            // @todo: 
+            /* @todo: Promote fast failure - add required implementation for product ready
+             *        implementation. */
             MBED_ASSERT(false);
             break;
-    }
-    
-    CellularSocket *sock = find_socket(sock_id);
-    if (sock) {
-        tr_info("Socket closed %d", sock_id);
-        sock->closed = true;
     }
 }
 
@@ -166,6 +169,13 @@ bool SIMCom_SIM7020_CellularStack::is_protocol_supported(nsapi_protocol_t protoc
 
 nsapi_error_t SIMCom_SIM7020_CellularStack::socket_close_impl(int sock_id)
 {
+    CellularSocket *sock = find_socket(sock_id);
+    MBED_ASSERT(sock != NULL);
+
+    if (sock->closed) {
+        return NSAPI_ERROR_OK;
+    }
+
     _at.cmd_start("AT+CSOCL=");
     _at.write_int(sock_id);
     _at.cmd_stop_read_resp();
@@ -287,7 +297,7 @@ nsapi_size_or_error_t SIMCom_SIM7020_CellularStack::socket_sendto_impl(CellularS
             _at.write_int(socket->id);
             _at.write_int(hexlen);
             _at.write_string(hexstr, false);
-            _at.cmd_stop();
+            _at.cmd_stop_read_resp();
 
 //            delete [] hexstr;
 #if 0
@@ -309,7 +319,7 @@ nsapi_size_or_error_t SIMCom_SIM7020_CellularStack::socket_sendto_impl(CellularS
             _at.write_int(socket->id);
             _at.write_int(hexlen);
             _at.write_string(hexstr, false);
-            _at.cmd_stop();
+            _at.cmd_stop_read_resp();
 
             if (_at.get_last_error() != NSAPI_ERROR_OK)  {
                 return NSAPI_ERROR_DEVICE_ERROR;
@@ -325,7 +335,7 @@ nsapi_size_or_error_t SIMCom_SIM7020_CellularStack::socket_sendto_impl(CellularS
             _at.write_int(socket->id);
             _at.write_int(hexlen);
             _at.write_string(hexstr, false);
-            _at.cmd_stop();
+            _at.cmd_stop_read_resp();
 
             delete [] hexstr;
 
@@ -349,6 +359,7 @@ nsapi_size_or_error_t SIMCom_SIM7020_CellularStack::socket_recvfrom_impl(Cellula
 {
     // Read all availabe rx data from the modem to the supplied buffer.
     MBED_ASSERT(size >= socket->pending_bytes);
+
 #if 1
     tr_debug("RX input size: %d", static_cast<int>(size));
     tr_debug("RX socket id: %d\n", static_cast<int>(socket->id));

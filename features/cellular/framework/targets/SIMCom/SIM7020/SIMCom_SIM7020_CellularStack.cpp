@@ -150,9 +150,11 @@ void SIMCom_SIM7020_CellularStack::urc_socket_closed()
 
             break;
         default:
+#if 0
             /* @todo: Promote fast failure - add required implementation for product ready
              *        implementation. */
             MBED_ASSERT(false);
+#endif
             break;
     }
 }

@@ -27,7 +27,8 @@ using namespace mbed;
 SIMCom_SIM7020_CellularStack::SIMCom_SIM7020_CellularStack(ATHandler       &atHandler,
                                                            int              cid,
                                                            nsapi_ip_stack_t stack_type) :
-                                                           AT_CellularStack(atHandler, cid, stack_type)
+                                                           AT_CellularStack(atHandler, cid, stack_type),
+                                                           _is_rx_buf_allocated(false)
 {
     _at.set_urc_handler("+CSONMI:",
                         mbed::Callback<void()>(this, &SIMCom_SIM7020_CellularStack::urc_csonmi));
@@ -102,9 +103,10 @@ void SIMCom_SIM7020_CellularStack::urc_csonmi()
 
 	const nsapi_size_t pending_bytes = _at.read_int();
     MBED_ASSERT((pending_bytes / 2) <= sizeof(_rx_buffer));
+    MBED_ASSERT(!_is_rx_buf_allocated);
     const ssize_t read_bytes_err = _at.read_hex_string((char *)_rx_buffer, pending_bytes);
-    // Store rx context to socket to be accessed later in @ref socket_recvfrom_impl
-    sock->pending_bytes = (pending_bytes / 2);
+    _is_rx_buf_allocated         = true;
+    sock->pending_bytes          = (pending_bytes / 2);
     MBED_ASSERT(sock->pending_bytes == static_cast<nsapi_size_t>(read_bytes_err));
     tr_debug("urc_csonmi store pending bytes: %d\n", sock->pending_bytes);
     sock->_cb(sock->_data);
@@ -323,6 +325,7 @@ nsapi_size_or_error_t SIMCom_SIM7020_CellularStack::socket_recvfrom_impl(Cellula
 
     memcpy(buffer, _rx_buffer, rx_available);
     socket->pending_bytes = 0;
+    _is_rx_buf_allocated  = false;
 
     if (address != NULL) {
         address->set_ip_address(_address.get_ip_address());

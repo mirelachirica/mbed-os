@@ -18,6 +18,8 @@
 #ifndef SIMCOM_SIM7020_CELLULARSTACK_H_
 #define SIMCOM_SIM7020_CELLULARSTACK_H_
 
+#define MAX_SEND_SIZE 512
+
 #include "AT_CellularStack.h"
 
 namespace mbed {
@@ -59,7 +61,7 @@ private:
 
     void handle_open_socket_response(int &modem_connect_id, int &err);
     
-static uint8_t _rx_buffer[512];
+    uint8_t _rx_buffer[MAX_SEND_SIZE];
     SocketAddress _address;
 };
 } // namespace mbed

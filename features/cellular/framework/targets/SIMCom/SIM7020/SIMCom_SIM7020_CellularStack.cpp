@@ -20,12 +20,10 @@
 #include "CellularUtil.h"
 #include "stdlib.h"
 
-#define MAX_SOCKET    5
-#define MAX_SEND_SIZE 512
+#define MAX_SOCKET 5
 
 using namespace mbed;
 
-uint8_t SIMCom_SIM7020_CellularStack::_rx_buffer[] = {0};
 SIMCom_SIM7020_CellularStack::SIMCom_SIM7020_CellularStack(ATHandler       &atHandler,
                                                            int              cid,
                                                            nsapi_ip_stack_t stack_type) :
@@ -75,17 +73,7 @@ nsapi_error_t SIMCom_SIM7020_CellularStack::socket_connect(nsapi_socket_t handle
     _at.write_int(socket->id);
     _at.write_int(address.get_port());
     _at.write_string(address.get_ip_address());
-#if 0
-    _at.cmd_stop();
     _at.cmd_stop_read_resp();
-#endif
-    _at.cmd_stop_read_resp();
-#if 0
-                _at.cmd_stop();
-
-                _at.resp_start("+CSOCON:");
-                _at.resp_stop();
-#endif
     _at.unlock();
 
     if (_at.get_last_error() == NSAPI_ERROR_OK) {
@@ -103,30 +91,23 @@ void SIMCom_SIM7020_CellularStack::urc_csonmi()
     const int sock_id = _at.read_int();
     tr_debug("urc_csonmi sock id: %d", static_cast<int>(sock_id));
 
-    CellularSocket *sock;
-    int i = 0;
-    while (i < get_max_socket_count()) {
-        sock = _socket[i];
-        if (sock != NULL) {
-            if (sock->id == sock_id) {
-                tr_debug("sock->id: %d\n", static_cast<int>(sock->id));
-                if (sock->_cb != NULL) {
-                    const nsapi_size_t pending_bytes = _at.read_int();
-                    MBED_ASSERT((pending_bytes / 2) <= sizeof(_rx_buffer));
-                    const ssize_t read_bytes_err = _at.read_hex_string((char *)_rx_buffer,
-                                                                       pending_bytes);
-                    // Store rx context to socket to be accessed later in @ref socket_recvfrom_impl
-                    sock->pending_bytes = (pending_bytes / 2);
-                    MBED_ASSERT(sock->pending_bytes == static_cast<nsapi_size_t>(read_bytes_err));
-                    tr_debug("urc_csonmi store pending bytes: %d\n", sock->pending_bytes);
-                    sock->_cb(sock->_data);
-                }
+    CellularSocket *sock = find_socket(sock_id);
+    if (sock == NULL) {
+		return;
+	}
 
-                break;
-            }
-        }
-        ++i;
+	if (sock->_cb == NULL) {
+        return;
     }
+
+	const nsapi_size_t pending_bytes = _at.read_int();
+    MBED_ASSERT((pending_bytes / 2) <= sizeof(_rx_buffer));
+    const ssize_t read_bytes_err = _at.read_hex_string((char *)_rx_buffer, pending_bytes);
+    // Store rx context to socket to be accessed later in @ref socket_recvfrom_impl
+    sock->pending_bytes = (pending_bytes / 2);
+    MBED_ASSERT(sock->pending_bytes == static_cast<nsapi_size_t>(read_bytes_err));
+    tr_debug("urc_csonmi store pending bytes: %d\n", sock->pending_bytes);
+    sock->_cb(sock->_data);
 }
 
 void SIMCom_SIM7020_CellularStack::urc_socket_closed()
@@ -150,11 +131,8 @@ void SIMCom_SIM7020_CellularStack::urc_socket_closed()
 
             break;
         default:
-#if 0
-            /* @todo: Promote fast failure - add required implementation for product ready
-             *        implementation. */
-            MBED_ASSERT(false);
-#endif
+		    tr_debug("urc_socket_closed unhandler error code id: %d", err);
+            /* @note: Add possible required implementation for device error code. */
             break;
     }
 }
@@ -219,28 +197,19 @@ nsapi_error_t SIMCom_SIM7020_CellularStack::create_socket_impl(CellularSocket *s
     _at.resp_start("+CSOC:");
     socket->id = _at.read_int();
     _at.resp_stop();
-#if 1
+
     const nsapi_error_t err = _at.get_last_error();
     MBED_ASSERT(err == NSAPI_ERROR_OK);
     MBED_ASSERT(socket->id >= 0);
-#endif
-#if 0
-    const bool is_create_ok = ((_at.get_last_error() == NSAPI_ERROR_OK) &&  (socket->id >= 0));
-    if (!is_create_ok) {
-        tr_error("Socket create failed %d", socket->id);
 
-        return NSAPI_ERROR_NO_SOCKET;
-    }
-#endif
-    // Check for duplicate socket id delivered by modem
+    // Check for duplicate socket id delivered by modem - should not never happen
     CellularSocket *sock;
-    for (unsigned int i = 0; (i < MAX_SOCKET); ++i) {
+    for (int i = 0; (i < get_max_socket_count()); ++i) {
         sock = _socket[i];
         if (sock != NULL) {
             if (sock->created && (sock->id == socket->id)) {
                 tr_error("Socket create failed: duplicate %d", socket->id);
-MBED_ASSERT(false);
-                return NSAPI_ERROR_NO_SOCKET;
+				MBED_ASSERT(false);
             }
         }
     }
@@ -256,7 +225,7 @@ nsapi_size_or_error_t SIMCom_SIM7020_CellularStack::socket_sendto_impl(CellularS
                                                                        const void          *data,
                                                                        nsapi_size_t         size)
 {
-    static char hexstr[MAX_SEND_SIZE * 2 + 1] = {0};
+    char *hexstr;
     int   hexlen;
 
     if (size > MAX_SEND_SIZE) {
@@ -287,50 +256,8 @@ nsapi_size_or_error_t SIMCom_SIM7020_CellularStack::socket_sendto_impl(CellularS
 
             // Tx sequence.
 
-//            hexstr         = new char[size * 2 + 1];
-#if 0
-            hexstr         = (char*)malloc(size * 2 + 1);
-            MBED_ASSERT(hexstr != NULL);
-#endif
+            hexstr         = new char[size * 2 + 1];
             hexlen         = mbed_cellular_util::char_str_to_hex_str((const char *)data, size, hexstr);
-            hexstr[hexlen] = 0;
-
-            _at.cmd_start("AT+CSOSEND=");
-            _at.write_int(socket->id);
-            _at.write_int(hexlen);
-            _at.write_string(hexstr, false);
-            _at.cmd_stop_read_resp();
-
-//            delete [] hexstr;
-#if 0
-            free(hexstr);
-#endif
-
-            if (_at.get_last_error() != NSAPI_ERROR_OK)  {
-                return NSAPI_ERROR_DEVICE_ERROR;
-            }
-
-            return size;
-
-            break;
-        case NSAPI_TCP:
-            hexlen         = mbed_cellular_util::char_str_to_hex_str((const char *)data, size, hexstr);
-            hexstr[hexlen] = 0;
-
-            _at.cmd_start("AT+CSOSEND=");
-            _at.write_int(socket->id);
-            _at.write_int(hexlen);
-            _at.write_string(hexstr, false);
-            _at.cmd_stop_read_resp();
-
-            if (_at.get_last_error() != NSAPI_ERROR_OK)  {
-                return NSAPI_ERROR_DEVICE_ERROR;
-            }
-
-            return size;
-#if 0
-            hexstr 		   = new char[size * 2 + 1];
-            hexlen 		   = mbed_cellular_util::char_str_to_hex_str((const char *)data, size, hexstr);
             hexstr[hexlen] = 0;
 
             _at.cmd_start("AT+CSOSEND=");
@@ -346,7 +273,27 @@ nsapi_size_or_error_t SIMCom_SIM7020_CellularStack::socket_sendto_impl(CellularS
             }
 
             return size;
-#endif
+
+            break;
+        case NSAPI_TCP:
+            hexstr         = new char[size * 2 + 1];
+            hexlen         = mbed_cellular_util::char_str_to_hex_str((const char *)data, size, hexstr);
+            hexstr[hexlen] = 0;
+
+            _at.cmd_start("AT+CSOSEND=");
+            _at.write_int(socket->id);
+            _at.write_int(hexlen);
+            _at.write_string(hexstr, false);
+            _at.cmd_stop_read_resp();
+
+			delete [] hexstr;
+
+            if (_at.get_last_error() != NSAPI_ERROR_OK)  {
+                return NSAPI_ERROR_DEVICE_ERROR;
+            }
+
+            return size;
+
             break;
         default:
             return NSAPI_ERROR_PARAMETER;
@@ -362,28 +309,19 @@ nsapi_size_or_error_t SIMCom_SIM7020_CellularStack::socket_recvfrom_impl(Cellula
     // Read all availabe rx data from the modem to the supplied buffer.
     MBED_ASSERT(size >= socket->pending_bytes);
 
-#if 1
-    tr_debug("RX input size: %d", static_cast<int>(size));
-    tr_debug("RX socket id: %d\n", static_cast<int>(socket->id));
-    tr_debug("RX socket->pending_bytes size: %d\n", static_cast<int>(socket->pending_bytes));
-#endif
+    tr_debug("socket_recvfrom_impl - input size: %d", static_cast<int>(size));
+    tr_debug("socket_recvfrom_impl - socket id: %d\n", static_cast<int>(socket->id));
+    tr_debug("socket_recvfrom_impl - pending_bytes: %d\n", static_cast<int>(socket->pending_bytes));
+
     const size_t rx_available = (socket->pending_bytes > size) ? size : socket->pending_bytes;
 
     if (rx_available == 0) {
         return NSAPI_ERROR_WOULD_BLOCK;
     }
 
-    tr_debug(">>>>>> L:RX copy size: %d", static_cast<int>(rx_available));
+    tr_debug("socket_recvfrom_impl - stack copy size: %d", static_cast<int>(rx_available));
 
     memcpy(buffer, _rx_buffer, rx_available);
-#if 0
-    delete[] _rx_buffer;
-#endif  // 0
-#if 0
-free(_rx_buffer);
-
-	_rx_buffer            = NULL;
-#endif
     socket->pending_bytes = 0;
 
     if (address != NULL) {

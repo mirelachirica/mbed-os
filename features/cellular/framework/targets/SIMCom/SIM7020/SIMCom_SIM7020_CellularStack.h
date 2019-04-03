@@ -61,8 +61,9 @@ private:
 
     void handle_open_socket_response(int &modem_connect_id, int &err);
     
-    uint8_t       _rx_buffer[MAX_SEND_SIZE];
-    bool          _is_rx_buf_allocated;
+    uint16_t      _rx_buf_offset;
+    uint8_t       _rx_buffer[2 * MAX_SEND_SIZE];
+//    bool          _is_rx_buf_allocated;
     SocketAddress _address;
 };
 } // namespace mbed

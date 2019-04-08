@@ -62,7 +62,7 @@ private:
     void handle_open_socket_response(int &modem_connect_id, int &err);
 
     uint16_t      _rx_buf_offset;
-    uint8_t       _rx_buffer[2 * MAX_SEND_SIZE];
+    uint8_t       _rx_buffer[3 * MAX_SEND_SIZE];
     SocketAddress _address;
 };
 } // namespace mbed

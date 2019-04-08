@@ -109,8 +109,8 @@ void SIMCom_SIM7020_CellularStack::urc_csonmi()
      *
      * This is required as mbedOS provided chipset driver programming model is not ideal for
      * SIM7020 specific requirements regarding rx data path. */
-    MBED_ASSERT(((_rx_buf_offset + (pending_bytes / 2)) <= sizeof(_rx_buffer)) &&
-                (sock->pending_bytes == _rx_buf_offset));
+    MBED_ASSERT(sock->pending_bytes == _rx_buf_offset);
+    MBED_ASSERT((_rx_buf_offset + (pending_bytes / 2)) <= sizeof(_rx_buffer));
 
     const ssize_t read_bytes_err = _at.read_hex_string((char *)(_rx_buffer + _rx_buf_offset), pending_bytes);
     MBED_ASSERT((pending_bytes / 2) == static_cast<nsapi_size_t>(read_bytes_err));

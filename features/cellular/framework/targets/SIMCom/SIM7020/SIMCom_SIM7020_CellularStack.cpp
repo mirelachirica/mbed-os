@@ -112,8 +112,19 @@ void SIMCom_SIM7020_CellularStack::urc_csonmi()
     MBED_ASSERT(sock->pending_bytes == _rx_buf_offset);
     MBED_ASSERT((_rx_buf_offset + (pending_bytes / 2)) <= sizeof(_rx_buffer));
 
-    const ssize_t read_bytes_err = _at.read_hex_string((char *)(_rx_buffer + _rx_buf_offset), pending_bytes);
-    MBED_ASSERT((pending_bytes / 2) == static_cast<nsapi_size_t>(read_bytes_err));
+    const ssize_t read_bytes_err = _at.read_hex_string((char *)(_rx_buffer + _rx_buf_offset),
+                                                       pending_bytes);
+    if ((pending_bytes / 2) != static_cast<nsapi_size_t>(read_bytes_err)) {
+        /* Promote fast failure detection - if t his branch is entered it most propably implies
+         * rx buffer overflow below in the host MCU stack. */
+
+        tr_error("P: %d", static_cast<int>(pending_bytes));
+        tr_error("R: %d", static_cast<int>(read_bytes_err));
+
+        MBED_ASSERT(false);
+    }
+    MBED_ASSERT(_at.get_last_error() == NSAPI_ERROR_OK);
+
     _rx_buf_offset      += (pending_bytes / 2);
     sock->pending_bytes += (pending_bytes / 2);
     MBED_ASSERT(sock->pending_bytes == _rx_buf_offset);

@@ -63,6 +63,11 @@ private:
     // URC handlers
     void urc_qiurc();
 
+    void urc_qiurc_recv(int sock_id);
+    void urc_qiurc_closed(int sock_id);
+    void socket_closed(int sock_id);
+
+
     void handle_open_socket_response(int &modem_connect_id, int &err);
 };
 } // namespace mbed

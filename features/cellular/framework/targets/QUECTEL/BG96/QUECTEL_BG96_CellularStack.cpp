@@ -17,6 +17,7 @@
 
 #include "QUECTEL/BG96/QUECTEL_BG96_CellularStack.h"
 #include "CellularLog.h"
+#include "mbed_wait_api.h"
 
 using namespace mbed;
 
@@ -48,7 +49,9 @@ nsapi_error_t QUECTEL_BG96_CellularStack::socket_connect(nsapi_socket_t handle, 
     int err = -1;
 
     _at.lock();
+   // _at.set_debug(true);
     if (socket->proto == NSAPI_TCP) {
+        wait(1);
         _at.cmd_start("AT+QIOPEN=");
         _at.write_int(_cid);
         _at.write_int(request_connect_id);
@@ -64,6 +67,7 @@ nsapi_error_t QUECTEL_BG96_CellularStack::socket_connect(nsapi_socket_t handle, 
         if ((_at.get_last_error() == NSAPI_ERROR_OK) && err) {
             if (err == BG96_SOCKET_BIND_FAIL) {
                 socket->created = false;
+                _at.set_debug(false);
                 return NSAPI_ERROR_PARAMETER;
             }
             _at.cmd_start("AT+QICLOSE=");
@@ -102,29 +106,49 @@ nsapi_error_t QUECTEL_BG96_CellularStack::socket_connect(nsapi_socket_t handle, 
         socket->created = true;
         socket->remoteAddress = address;
         socket->connected = true;
+        _at.set_debug(false);
         return NSAPI_ERROR_OK;
     }
-
+_at.set_debug(false);
     return NSAPI_ERROR_NO_CONNECTION;
 }
 
 void QUECTEL_BG96_CellularStack::urc_qiurc()
 {
-    int sock_id = 0;
 
+    char urc_string[7];
     _at.lock();
-    (void) _at.skip_param();
-    sock_id = _at.read_int();
+    _at.read_string(urc_string, sizeof(urc_string));
+    int sock_id = _at.read_int();
     _at.unlock();
 
-    for (int i = 0; i < get_max_socket_count(); i++) {
-        CellularSocket *sock = _socket[i];
-        if (sock && sock->id == sock_id) {
-            if (sock->_cb) {
-                sock->_cb(sock->_data);
-            }
-            break;
-        }
+    if (!strcmp(urc_string, "recv")) {
+        urc_qiurc_recv(sock_id);
+    } else if (!strcmp(urc_string, "closed")) {
+        urc_qiurc_closed(sock_id);
+    }
+
+}
+
+void QUECTEL_BG96_CellularStack::socket_closed(int sock_id)
+{
+    CellularSocket *sock = find_socket(sock_id);
+    if (sock) {
+        tr_error("Socket closed %d", sock_id);
+        sock->closed = true;
+    }
+}
+
+void QUECTEL_BG96_CellularStack::urc_qiurc_closed(int sock_id)
+{
+    socket_closed(sock_id);
+}
+
+void QUECTEL_BG96_CellularStack::urc_qiurc_recv(int sock_id)
+{
+    CellularSocket *sock = find_socket(sock_id);
+    if (sock && sock->_cb) {
+        sock->_cb(sock->_data);
     }
 }
 

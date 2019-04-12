@@ -376,6 +376,10 @@ int AT_CellularStack::get_socket_index_by_port(uint16_t port)
 
 AT_CellularStack::CellularSocket *AT_CellularStack::find_socket(int sock_id)
 {
+    if (sock_id < 0) {
+        return NULL;
+    }
+
     CellularSocket *sock = NULL;
     for (int i = 0; i < _socket_count; i++) {
         if (_socket[i] && _socket[i]->id == sock_id) {

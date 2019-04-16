@@ -71,7 +71,7 @@ nsapi_error_t SIMCom_SIM7020_CellularStack::socket_connect(nsapi_socket_t handle
 
     _at.lock();
 	_at.cmd_start("AT+CSOCON=");
-    _at.write_int(socket->id);
+    _at.write_int(socket->id - 1);
     _at.write_int(address.get_port());
     _at.write_string(address.get_ip_address());
     _at.cmd_stop_read_resp();
@@ -89,10 +89,10 @@ nsapi_error_t SIMCom_SIM7020_CellularStack::socket_connect(nsapi_socket_t handle
 
 void SIMCom_SIM7020_CellularStack::urc_csonmi()
 {
-    const int sock_id = _at.read_int();
+    int sock_id = _at.read_int();
     tr_debug("urc_csonmi sock id: %d", static_cast<int>(sock_id));
 
-    CellularSocket *sock = find_socket(sock_id);
+    CellularSocket *sock = find_socket(sock_id + 1);
     if (sock == NULL) {
 		return;
 	}
@@ -143,7 +143,7 @@ void SIMCom_SIM7020_CellularStack::urc_socket_closed()
     switch (err) {
         CellularSocket *sock;
         case 4:
-            sock = find_socket(sock_id);
+            sock = find_socket(sock_id + 1);
             if (sock != NULL) {
                 sock->closed = true;
 
@@ -180,7 +180,7 @@ nsapi_error_t SIMCom_SIM7020_CellularStack::socket_close_impl(int sock_id)
     }
 
     _at.cmd_start("AT+CSOCL=");
-    _at.write_int(sock_id);
+    _at.write_int(sock_id - 1);
     _at.cmd_stop_read_resp();
 
     return _at.get_last_error();
@@ -226,6 +226,7 @@ nsapi_error_t SIMCom_SIM7020_CellularStack::create_socket_impl(CellularSocket *s
     MBED_ASSERT(socket->id >= 0);
 
     // Check for duplicate socket id delivered by modem - should not never happen
+    ++(socket->id);
     CellularSocket *sock;
     for (int i = 0; (i < get_max_socket_count()); ++i) {
         sock = _socket[i];
@@ -261,7 +262,7 @@ nsapi_size_or_error_t SIMCom_SIM7020_CellularStack::socket_sendto_impl(CellularS
 
                 _address = address;
                 _at.cmd_start("AT+CSOCON=");
-                _at.write_int(socket->id);
+                _at.write_int(socket->id - 1);
                 _at.write_int(address.get_port());
                 _at.write_string(address.get_ip_address());
                 _at.cmd_stop();
@@ -283,7 +284,7 @@ nsapi_size_or_error_t SIMCom_SIM7020_CellularStack::socket_sendto_impl(CellularS
             hexstr[hexlen] = 0;
 
             _at.cmd_start("AT+CSOSEND=");
-            _at.write_int(socket->id);
+            _at.write_int(socket->id - 1);
             _at.write_int(hexlen);
             _at.write_string(hexstr, false);
             _at.cmd_stop_read_resp();
@@ -304,7 +305,7 @@ nsapi_size_or_error_t SIMCom_SIM7020_CellularStack::socket_sendto_impl(CellularS
             hexstr[hexlen] = 0;
 
             _at.cmd_start("AT+CSOSEND=");
-            _at.write_int(socket->id);
+            _at.write_int(socket->id - 1);
             _at.write_int(hexlen);
             _at.write_string(hexstr, false);
             _at.cmd_stop_read_resp();

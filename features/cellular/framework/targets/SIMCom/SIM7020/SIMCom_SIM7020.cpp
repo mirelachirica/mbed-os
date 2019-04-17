@@ -42,21 +42,6 @@ static const intptr_t cellular_properties[AT_CellularBase::PROPERTY_MAX] = {
     1,  // PROPERTY_AT_CGEREP
 };
 
-#if 0
-static const intptr_t cellular_properties[AT_CellularBase::PROPERTY_MAX] = {
-    0,    // C_EREG
-    AT_CellularNetwork::RegistrationModeLAC,    // C_GREG
-    0,    // C_REG
-    0,  // AT_CGSN_WITH_TYPE
-    0,  // AT_CGDATA
-    1,  // AT_CGAUTH
-    1,  // PROPERTY_IPV4_STACK
-    0,  // PROPERTY_IPV6_STACK
-    0,  // PROPERTY_IPV4V6_STACK
-    0,  // PROPERTY_NON_IP_PDP_TYPE
-};
-#endif
-
 #include "mbed.h"
 SIMCom_SIM7020::SIMCom_SIM7020(FileHandle *fh) : AT_CellularDevice(fh)
 {
@@ -95,15 +80,10 @@ void SIMCom_SIM7020::set_ready_cb(Callback<void()> callback)
 #include "UARTSerial.h"
 CellularDevice *CellularDevice::get_default_instance()
 {
-    static UARTSerial serial(MBED_CONF_SIMCOM_SIM7020_TX/*SERIAL_TX1*/,
-                             MBED_CONF_SIMCOM_SIM7020_RX/*SERIAL_RX1*/,
+    static UARTSerial serial(MBED_CONF_SIMCOM_SIM7020_TX,
+                             MBED_CONF_SIMCOM_SIM7020_RX,
                              MBED_CONF_SIMCOM_SIM7020_BAUDRATE);
-#if defined (MBED_CONF_UBLOX_AT_RTS) && defined(MBED_CONF_UBLOX_AT_CTS)
-#if 0
-    tr_debug("SIMCOM_SIM7020 flow control: RTS %d CTS %d", MBED_CONF_SIMCOM_SIM7020_RTS, MBED_CONF_SIMCOM_SIM7020_CTS);
-    serial.set_flow_control(SerialBase::RTSCTS, MBED_CONF_SIMCOM_SIM7020_RTS, MBED_CONF_SIMCOM_SIM7020_CTS);
-#endif
-#endif
+
     static SIMCom_SIM7020 device(&serial);
     return &device;
 }

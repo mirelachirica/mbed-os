@@ -26,17 +26,4 @@ SIMCom_SIM7020_CellularInformation::~SIMCom_SIM7020_CellularInformation()
 {
 }
 
-nsapi_error_t SIMCom_SIM7020_CellularInformation::get_iccid(char *buf, size_t buf_size)
-{
-#if 0
-    _at.lock();
-    _at.cmd_start("AT+QCCID");
-    _at.cmd_stop();
-    _at.resp_start("+QCCID:");
-    _at.read_string(buf, buf_size);
-    _at.resp_stop();
-    return _at.unlock_return_error();
-#endif
-}
-
 } /* namespace mbed */

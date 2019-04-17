@@ -16,9 +16,7 @@
  */
 
 #include "SIMCom_SIM7020_CellularNetwork.h"
-#if 0
-#include "QUECTEL/BG96/QUECTEL_BG96_CellularStack.h"
-#endif
+
 using namespace mbed;
 
 SIMCom_SIM7020_CellularNetwork::SIMCom_SIM7020_CellularNetwork(ATHandler &atHandler) : AT_CellularNetwork(atHandler)

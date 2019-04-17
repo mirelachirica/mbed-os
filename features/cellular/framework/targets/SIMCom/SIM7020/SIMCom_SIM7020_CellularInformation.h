@@ -27,7 +27,7 @@ public:
     virtual ~SIMCom_SIM7020_CellularInformation();
 
 public: // AT_CellularInformation
-    virtual nsapi_error_t get_iccid(char *buf, size_t buf_size);
+
 };
 
 } /* namespace mbed */

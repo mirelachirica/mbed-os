@@ -25,6 +25,25 @@ using namespace mbed;
 #define DEVICE_READY_URC "CPIN:"
 
 static const intptr_t cellular_properties[AT_CellularBase::PROPERTY_MAX] = {
+    AT_CellularNetwork::RegistrationModeLAC,    // C_EREG
+    AT_CellularNetwork::RegistrationModeLAC,    // C_GREG
+    AT_CellularNetwork::RegistrationModeLAC,    // C_REG
+    0,  // AT_CGSN_WITH_TYPE
+    0,  // AT_CGDATA
+    1,  // AT_CGAUTH
+    1,  // AT_CNMI
+    1,  // AT_CSMP
+    1,  // AT_CMGF
+    1,  // AT_CSDH
+    1,  // PROPERTY_IPV4_STACK
+    0,  // PROPERTY_IPV6_STACK
+    0,  // PROPERTY_IPV4V6_STACK
+    1,  // PROPERTY_NON_IP_PDP_TYPE
+    1,  // PROPERTY_AT_CGEREP
+};
+
+#if 0
+static const intptr_t cellular_properties[AT_CellularBase::PROPERTY_MAX] = {
     0,    // C_EREG
     AT_CellularNetwork::RegistrationModeLAC,    // C_GREG
     0,    // C_REG
@@ -36,6 +55,7 @@ static const intptr_t cellular_properties[AT_CellularBase::PROPERTY_MAX] = {
     0,  // PROPERTY_IPV4V6_STACK
     0,  // PROPERTY_NON_IP_PDP_TYPE
 };
+#endif
 
 #include "mbed.h"
 SIMCom_SIM7020::SIMCom_SIM7020(FileHandle *fh) : AT_CellularDevice(fh)
@@ -43,7 +63,7 @@ SIMCom_SIM7020::SIMCom_SIM7020(FileHandle *fh) : AT_CellularDevice(fh)
     DigitalOut modem_power_on(PE_15);
     modem_power_on = 1;
     Thread::wait(10000);
-    
+
     AT_CellularBase::set_cellular_properties(cellular_properties);
 }
 

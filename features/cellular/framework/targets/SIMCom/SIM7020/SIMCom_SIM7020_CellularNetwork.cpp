@@ -25,52 +25,17 @@ SIMCom_SIM7020_CellularNetwork::SIMCom_SIM7020_CellularNetwork(ATHandler &atHand
 
 SIMCom_SIM7020_CellularNetwork::~SIMCom_SIM7020_CellularNetwork()
 {
+
 }
 
-nsapi_error_t SIMCom_SIM7020_CellularNetwork::set_access_technology_impl(RadioAccessTechnology opsAct)
+nsapi_error_t SIMCom_SIM7020_CellularNetwork::set_access_technology_impl(RadioAccessTechnology opRat)
 {
-    MBED_ASSERT(false);
-#if 0
-    _at.lock();
+    if (opRat != RAT_NB1) {
+        // Only rat that is supported by this modem.
+        _op_act = RAT_NB1;
 
-    switch (opsAct) {
-        case RAT_CATM1:
-            _at.cmd_start("AT+QCFG=\"nwscanseq\",020301");
-            _at.cmd_stop_read_resp();
-            _at.cmd_start("AT+QCFG=\"nwscanmode\",3,1");
-            _at.cmd_stop_read_resp();
-            _at.cmd_start("AT+QCFG=\"iotopmode\",0,1");
-            _at.cmd_stop_read_resp();
-            break;
-        case RAT_NB1:
-            _at.cmd_start("AT+QCFG=\"nwscanseq\",030201");
-            _at.cmd_stop_read_resp();
-            _at.cmd_start("AT+QCFG=\"nwscanmode\",3,1");
-            _at.cmd_stop_read_resp();
-            _at.cmd_start("AT+QCFG=\"iotopmode\",1,1");
-            _at.cmd_stop_read_resp();
-            break;
-        case RAT_GSM:
-        case RAT_GSM_COMPACT:
-        case RAT_UTRAN:
-        case RAT_EGPRS:
-            _at.cmd_start("AT+QCFG=\"nwscanseq\",010203");
-            _at.cmd_stop_read_resp();
-            _at.cmd_start("AT+QCFG=\"nwscanmode\",1,1");
-            _at.cmd_stop_read_resp();
-            break;
-        default:
-            _at.cmd_start("AT+QCFG=\"nwscanseq\",020301");
-            _at.cmd_stop_read_resp();
-            _at.cmd_start("AT+QCFG=\"nwscanmode\",0,1"); //auto mode
-            _at.cmd_stop_read_resp();
-            _at.cmd_start("AT+QCFG=\"iotopmode\",2,1"); //auto mode
-            _at.cmd_stop_read_resp();
-            _at.unlock();
-            _op_act = RAT_UNKNOWN;
-            return NSAPI_ERROR_UNSUPPORTED;
+        return NSAPI_ERROR_UNSUPPORTED;
     }
 
-    return _at.unlock_return_error();
-#endif
+    return NSAPI_ERROR_OK;
 }

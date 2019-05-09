@@ -32,6 +32,8 @@ protected:
     virtual NetworkStack *get_stack();
 #endif // #if !NSAPI_PPP_AVAILABLE
 
+private:
+    virtual bool get_context();
 };
 
 } /* namespace mbed */

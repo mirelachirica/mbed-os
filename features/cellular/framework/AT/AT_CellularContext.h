@@ -99,6 +99,7 @@ protected:
     virtual void deactivate_ip_context();
     virtual void set_disconnect();
     virtual void deactivate_context();
+    virtual bool get_context();
 private:
 #if NSAPI_PPP_AVAILABLE
     nsapi_error_t open_data_channel();
@@ -111,7 +112,6 @@ private:
     nsapi_error_t activate_ip_context();
     void check_and_deactivate_context();
     bool set_new_context(int cid);
-    bool get_context();
     nsapi_error_t delete_current_context();
     pdp_type_t string_to_pdp_type(const char *pdp_type);
     nsapi_error_t check_operation(nsapi_error_t err, ContextOperation op);

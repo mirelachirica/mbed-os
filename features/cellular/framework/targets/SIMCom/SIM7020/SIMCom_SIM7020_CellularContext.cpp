@@ -60,7 +60,7 @@ NetworkStack *SIMCom_SIM7020_CellularContext::get_stack()
 
 bool SIMCom_SIM7020_CellularContext::get_context()
 {
-	_at.cmd_start("AT*MCGDEFCONT=");
+    _at.cmd_start("AT*MCGDEFCONT=");
     _at.write_string("IP");
     _at.write_string(_apn);
     _at.cmd_stop_read_resp();

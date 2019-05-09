@@ -27,8 +27,8 @@ using namespace mbed;
 SIMCom_SIM7020_CellularStack::SIMCom_SIM7020_CellularStack(ATHandler       &atHandler,
                                                            int              cid,
                                                            nsapi_ip_stack_t stack_type) :
-                                                           AT_CellularStack(atHandler, cid, stack_type),
-                                                           _rx_buf_offset(0)
+    AT_CellularStack(atHandler, cid, stack_type),
+    _rx_buf_offset(0)
 {
     _at.set_urc_handler("+CSONMI:",
                         mbed::Callback<void()>(this, &SIMCom_SIM7020_CellularStack::urc_csonmi));
@@ -70,7 +70,7 @@ nsapi_error_t SIMCom_SIM7020_CellularStack::socket_connect(nsapi_socket_t handle
     }
 
     _at.lock();
-	_at.cmd_start("AT+CSOCON=");
+    _at.cmd_start("AT+CSOCON=");
     _at.write_int(socket->id - 1);
     _at.write_int(address.get_port());
     _at.write_string(address.get_ip_address());
@@ -79,7 +79,7 @@ nsapi_error_t SIMCom_SIM7020_CellularStack::socket_connect(nsapi_socket_t handle
 
     if (_at.get_last_error() == NSAPI_ERROR_OK) {
         socket->remoteAddress = address;
-        socket->connected 	  = true;
+        socket->connected     = true;
 
         return NSAPI_ERROR_OK;
     }
@@ -94,14 +94,14 @@ void SIMCom_SIM7020_CellularStack::urc_csonmi()
 
     CellularSocket *sock = find_socket(sock_id + 1);
     if (sock == NULL) {
-		return;
-	}
-
-	if (sock->_cb == NULL) {
         return;
     }
 
-	const nsapi_size_t pending_bytes = _at.read_int();
+    if (sock->_cb == NULL) {
+        return;
+    }
+
+    const nsapi_size_t pending_bytes = _at.read_int();
 
     /* Promote fast failure - verify following assumptions:
      * 1) rx buffer overflow detection
@@ -141,7 +141,7 @@ void SIMCom_SIM7020_CellularStack::urc_socket_closed()
     tr_debug("urc_socket_closed err: %d", err);
 
     switch (err) {
-        CellularSocket *sock;
+            CellularSocket *sock;
         case 4:
             sock = find_socket(sock_id + 1);
             if (sock != NULL) {
@@ -154,7 +154,7 @@ void SIMCom_SIM7020_CellularStack::urc_socket_closed()
 
             break;
         default:
-		    tr_debug("urc_socket_closed unhandler error code id: %d", err);
+            tr_debug("urc_socket_closed unhandler error code id: %d", err);
             /* @note: Add possible required implementation for device error code. */
             break;
     }
@@ -233,7 +233,7 @@ nsapi_error_t SIMCom_SIM7020_CellularStack::create_socket_impl(CellularSocket *s
         if (sock != NULL) {
             if (sock->created && (sock->id == socket->id)) {
                 tr_error("Socket create failed: duplicate %d", socket->id);
-				MBED_ASSERT(false);
+                MBED_ASSERT(false);
             }
         }
     }
@@ -254,8 +254,8 @@ nsapi_size_or_error_t SIMCom_SIM7020_CellularStack::socket_sendto_impl(CellularS
     }
 
     switch (socket->proto) {
-        char *hexstr;
-        int   hexlen;
+            char *hexstr;
+            int   hexlen;
         case NSAPI_UDP:
             if (socket->remoteAddress != address) {
                 /* No existing connection endpoint setup in the modem for this remote peer, we need to create one here. */
@@ -310,7 +310,7 @@ nsapi_size_or_error_t SIMCom_SIM7020_CellularStack::socket_sendto_impl(CellularS
             _at.write_string(hexstr, false);
             _at.cmd_stop_read_resp();
 
-			delete [] hexstr;
+            delete [] hexstr;
 
             if (_at.get_last_error() != NSAPI_ERROR_OK)  {
                 return NSAPI_ERROR_DEVICE_ERROR;

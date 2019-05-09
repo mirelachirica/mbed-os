@@ -42,13 +42,8 @@ static const intptr_t cellular_properties[AT_CellularBase::PROPERTY_MAX] = {
     1,  // PROPERTY_AT_CGEREP
 };
 
-#include "mbed.h"
 SIMCom_SIM7020::SIMCom_SIM7020(FileHandle *fh) : AT_CellularDevice(fh)
 {
-    DigitalOut modem_power_on(PE_15);
-    modem_power_on = 1;
-    Thread::wait(10000);
-
     AT_CellularBase::set_cellular_properties(cellular_properties);
 }
 

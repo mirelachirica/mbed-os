@@ -43,6 +43,7 @@ protected: // AT_CellularDevice
 
 public:
     void handle_urc(FileHandle *fh);
+    void urc_pdpdeact();
 };
 } // namespace mbed
 #endif // QUECTEL_BG96_H_

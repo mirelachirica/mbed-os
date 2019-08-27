@@ -27,6 +27,7 @@
 #include "utest.h"
 #include "utest/utest_stack_trace.h"
 #include "tcp_tests.h"
+#include "../cellular_tests_common.h"
 
 #ifndef ECHO_SERVER_ADDR
 #error [NOT_SUPPORTED] Requires parameters for echo server
@@ -88,7 +89,7 @@ nsapi_error_t tcpsocket_connect_to_srv(TCPSocket &sock, uint16_t port)
     NetworkInterface::get_default_instance()->gethostbyname(ECHO_SERVER_ADDR, &tcp_addr);
     tcp_addr.set_port(port);
 
-    printf("MBED: Server '%s', port %d\n", tcp_addr.get_ip_address(), tcp_addr.get_port());
+    printf("MBED: Server '%s', port %d local address: %s\n", tcp_addr.get_ip_address(), tcp_addr.get_port(), NetworkInterface::get_default_instance()->get_ip_address());
 
     nsapi_error_t err = sock.open(NetworkInterface::get_default_instance());
     if (err != NSAPI_ERROR_OK) {
@@ -214,8 +215,8 @@ Case cases[] = {
     Case("TCPSOCKET_BIND_WRONG_TYPE", TCPSOCKET_BIND_WRONG_TYPE),
     Case("TCPSOCKET_BIND_UNOPENED", TCPSOCKET_BIND_UNOPENED),
     Case("TCPSOCKET_SETSOCKOPT_KEEPALIVE_VALID", TCPSOCKET_SETSOCKOPT_KEEPALIVE_VALID),
-    Case("TCPSOCKET_RECV_100K", TCPSOCKET_RECV_100K),
-    Case("TCPSOCKET_RECV_100K_NONBLOCK", TCPSOCKET_RECV_100K_NONBLOCK),
+//    Case("TCPSOCKET_RECV_100K", TCPSOCKET_RECV_100K),
+//    Case("TCPSOCKET_RECV_100K_NONBLOCK", TCPSOCKET_RECV_100K_NONBLOCK),
     Case("TCPSOCKET_RECV_TIMEOUT", TCPSOCKET_RECV_TIMEOUT),
     Case("TCPSOCKET_SEND_REPEAT", TCPSOCKET_SEND_REPEAT),
     Case("TCPSOCKET_SEND_TIMEOUT", TCPSOCKET_SEND_TIMEOUT),
@@ -235,6 +236,10 @@ Specification specification(greentea_setup, cases, greentea_teardown, tcp_test_c
 
 int main()
 {
+    #if MBED_CONF_MBED_TRACE_ENABLE
+    trace_open();
+#endif
+
     return !Harness::run(specification);
 }
 

@@ -90,6 +90,7 @@ static void check_RFC_864_pattern(void *rx_buff, const size_t len, const size_t 
 
     free(ref_buff);
     TEST_ASSERT(match);
+    if (match) {printf("\nCHECK SUCCESS len: %d ref_buff: %.*s\n"/*rx_buff: %.*s\n\n"*/, len, 10, ref_buff);}//, len, rx_buff);}
 }
 
 void rcv_n_chk_against_rfc864_pattern(TCPSocket &sock)
@@ -111,6 +112,7 @@ void rcv_n_chk_against_rfc864_pattern(TCPSocket &sock)
         }
         check_RFC_864_pattern(buff, rd, recvd_size);
         recvd_size += rd;
+        printf("\nLOOP rd: %d recvd_size: %d\n", rd, recvd_size);
     }
     timer.stop();
     printf("MBED: Time taken: %fs\n", timer.read());

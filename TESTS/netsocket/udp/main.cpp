@@ -27,6 +27,7 @@
 #include "utest.h"
 #include "utest/utest_stack_trace.h"
 #include "udp_tests.h"
+#include "../cellular_tests_common.h"
 
 #ifndef ECHO_SERVER_ADDR
 #error [NOT_SUPPORTED] Requires parameters for echo server
@@ -199,6 +200,10 @@ Specification specification(greentea_setup, cases, greentea_teardown, udp_test_c
 
 int main()
 {
+#if MBED_CONF_MBED_TRACE_ENABLE
+    trace_open();
+#endif
+
     return !Harness::run(specification);
 }
 

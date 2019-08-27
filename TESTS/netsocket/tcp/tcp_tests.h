@@ -47,7 +47,7 @@ namespace tcp_global {
 #ifdef MBED_GREENTEA_TEST_TCPSOCKET_TIMEOUT_S
 static const int TESTS_TIMEOUT = MBED_GREENTEA_TEST_TCPSOCKET_TIMEOUT_S;
 #else
-static const int TESTS_TIMEOUT = (10 * 60);
+static const int TESTS_TIMEOUT = (100 * 60);
 #endif
 static const int TCP_OS_STACK_SIZE = 2048;
 

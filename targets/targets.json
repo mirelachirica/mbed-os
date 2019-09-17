@@ -9539,7 +9539,7 @@
             "PORTIN",
             "PORTINOUT",
             "PORTOUT",
-            "PWMOUT",            
+            "PWMOUT",
             "SERIAL",
             "SERIAL_ASYNCH",
             "SERIAL_FC",
@@ -9562,7 +9562,7 @@
             "tickless-from-us-ticker": true
         },
         "forced_reset_timeout": 3
-    },    
+    },
     "__build_tools_metadata__": {
         "version": "1",
         "public": false

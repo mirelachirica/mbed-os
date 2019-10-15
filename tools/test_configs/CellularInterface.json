@@ -20,6 +20,10 @@
             "help" : "Discard port of echo server for TLS",
             "value" : "2009"
         },
+        "baud-rate": {
+            "help": "baud rate",
+            "value": 115200
+        },
         "trace-level": {
             "help": "Note that excessive trace prints may mess up with Greentea parsing",
             "macro_name": "MBED_TRACE_MAX_LEVEL",

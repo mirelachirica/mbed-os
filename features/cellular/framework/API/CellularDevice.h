@@ -443,6 +443,9 @@ public:
      */
     virtual nsapi_error_t release_at_handler(ATHandler *at_handler) = 0;
 
+    virtual nsapi_error_t set_baud_rate(int baud_rate) = 0;
+    virtual nsapi_error_t get_baud_rate(int &baud_rate) = 0;
+
 protected:
     friend class AT_CellularNetwork;
     friend class AT_CellularContext;

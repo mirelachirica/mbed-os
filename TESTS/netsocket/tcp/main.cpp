@@ -21,6 +21,8 @@
 #error [NOT_SUPPORTED] No network configuration found for this target.
 #else
 
+#include "CellularDevice.h"
+
 #include "mbed.h"
 #include "greentea-client/test_env.h"
 #include "unity/unity.h"
@@ -151,6 +153,11 @@ utest::v1::status_t greentea_setup(const size_t number_of_cases)
 {
     GREENTEA_SETUP(tcp_global::TESTS_TIMEOUT, "default_auto");
     _ifup();
+
+#ifdef MBED_CONF_APP_BAUD_RATE
+    CellularDevice::get_default_instance()->set_baud_rate(MBED_CONF_APP_BAUD_RATE);
+#endif
+
     tc_bucket.start();
     return greentea_test_setup_handler(number_of_cases);
 }

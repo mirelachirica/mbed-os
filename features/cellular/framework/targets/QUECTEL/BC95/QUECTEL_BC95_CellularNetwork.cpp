@@ -17,6 +17,8 @@
 
 #include "QUECTEL_BC95_CellularNetwork.h"
 
+#include "CellularLog.h"
+
 using namespace mbed;
 
 QUECTEL_BC95_CellularNetwork::QUECTEL_BC95_CellularNetwork(ATHandler &atHandler) : AT_CellularNetwork(atHandler)

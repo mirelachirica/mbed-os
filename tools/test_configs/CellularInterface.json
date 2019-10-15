@@ -23,7 +23,7 @@
         "trace-level": {
             "help": "Note that excessive trace prints may mess up with Greentea parsing",
             "macro_name": "MBED_TRACE_MAX_LEVEL",
-            "value": "TRACE_LEVEL_INFO"
+            "value": "TRACE_LEVEL_ERROR"
         }
     },
     "target_overrides": {
@@ -40,6 +40,27 @@
             "lwip.tcp-enabled": true,
             "lwip.ppp-enabled": false,
             "lwip.ethernet-enabled": false,
+            "cellular.debug-at": false,
+            "platform.stdio-baud-rate": 115200,
+            "platform.default-serial-baud-rate": 115200,
+            "cellular.radio-access-technology": 3,
+            "drivers.uart-serial-rxbuf-size":1500,
+            "drivers.uart-serial-txbuf-size":1500
+        },
+        "NRF52840_DK": {
+            "QUECTEL_BG96.provide-default": true,
+            "QUECTEL_BG96.tx": "p42",
+            "QUECTEL_BG96.rx": "p40",
+            "QUECTEL_BG96.cts": "p35",
+            "QUECTEL_BG96.rts": "p36",
+            "nsapi.default-cellular-apn": "\"internet\"",
+            "cellular.radio-access-technology": 9,
+            "cellular.use-apn-lookup": false,
+            "ppp-cell-iface.apn-lookup": false,
+            "lwip.ipv4-enabled": true,
+            "lwip.ipv6-enabled": false,
+            "lwip.ppp-enabled": false,
+            "lwip.tcp-enabled": false,
             "cellular.debug-at": false
         },
         "NRF52840_DK": {

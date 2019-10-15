@@ -73,7 +73,7 @@ static void _ifup()
     NetworkInterface *net = NetworkInterface::get_default_instance();
     nsapi_error_t err = net->connect();
     TEST_ASSERT_EQUAL(NSAPI_ERROR_OK, err);
-    printf("MBED: TCPClient IP address is '%s'\n", net->get_ip_address() ? net->get_ip_address() : "null");
+    printf("MBED: TCPClient IP address is '%s'\n", net->get_ip_address());
 }
 
 static void _ifdown()
@@ -215,8 +215,8 @@ Case cases[] = {
     Case("TCPSOCKET_BIND_WRONG_TYPE", TCPSOCKET_BIND_WRONG_TYPE),
     Case("TCPSOCKET_BIND_UNOPENED", TCPSOCKET_BIND_UNOPENED),
     Case("TCPSOCKET_SETSOCKOPT_KEEPALIVE_VALID", TCPSOCKET_SETSOCKOPT_KEEPALIVE_VALID),
-//    Case("TCPSOCKET_RECV_100K", TCPSOCKET_RECV_100K),
-//    Case("TCPSOCKET_RECV_100K_NONBLOCK", TCPSOCKET_RECV_100K_NONBLOCK),
+    Case("TCPSOCKET_RECV_100K", TCPSOCKET_RECV_100K),
+    Case("TCPSOCKET_RECV_100K_NONBLOCK", TCPSOCKET_RECV_100K_NONBLOCK),
     Case("TCPSOCKET_RECV_TIMEOUT", TCPSOCKET_RECV_TIMEOUT),
     Case("TCPSOCKET_SEND_REPEAT", TCPSOCKET_SEND_REPEAT),
     Case("TCPSOCKET_SEND_TIMEOUT", TCPSOCKET_SEND_TIMEOUT),

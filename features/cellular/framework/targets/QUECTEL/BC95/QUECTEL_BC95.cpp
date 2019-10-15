@@ -20,6 +20,7 @@
 #include "QUECTEL_BC95_CellularInformation.h"
 #include "QUECTEL_BC95.h"
 #include "CellularLog.h"
+#include "rtos/ThisThread.h"
 
 #define CONNECT_DELIM         "\r\n"
 #define CONNECT_BUFFER_SIZE   (1280 + 80 + 80) // AT response + sscanf format
@@ -84,13 +85,62 @@ AT_CellularInformation *QUECTEL_BC95::open_information_impl(ATHandler &at)
 
 nsapi_error_t QUECTEL_BC95::init()
 {
+    rtos::ThisThread::sleep_for(3000);
+
     setup_at_handler();
 
     _at->lock();
     _at->flush();
+
+      // _at->set_baud(115200);
+
     _at->at_cmd_discard("", "");  //Send AT
 
+    if(_at->get_last_error())
+    tr_info("\nERROR1\n");
+
     _at->at_cmd_discard("+CMEE", "=1"); // verbose responses
+
+    if(_at->get_last_error())
+    tr_info("\nERROR2\n");
+
+//    _at->at_cmd_discard("+IPR", "=9600");
+
+//    //tr_debug("\nNATSPEED\n");
+//    _at->at_cmd_discard("+NATSPEED", "?");
+//    _at->cmd_start("AT+NATSPEED?");
+//    _at->cmd_stop();
+//    _at->resp_start("+NATSPEED:");
+//    tr_info("NATSPEED: %d, json: %d", _at->read_int(), MBED_CONF_CELLULAR_BAUD_RATE);
+//    _at->resp_stop();
+//
+//    if(_at->get_last_error())
+//    tr_info("\nERROR3\n");
+//
+//    _at->cmd_start("AT+NATSPEED=115200,30,0,3,1,0,1");
+//    _at->cmd_stop();
+//    _at->resp_start();
+//    _at->resp_stop();
+//
+//    if(_at->get_last_error())
+//    tr_info("\nERROR4\n");
+//
+//
+//    _at->set_baud(115200);
+//
+//    //_at->at_cmd_discard("+NATSPEED", "?");
+//
+//    _at->cmd_start("AT+NATSPEED?");
+//    _at->cmd_stop();
+//    _at->resp_start("+NATSPEED:");
+//    tr_info("NATSPEED: %d", _at->read_int());
+//    _at->resp_stop();
+//
+//    if(_at->get_last_error())
+//    tr_info("\nERROR5\n");
+//
+//    //tr_debug("\nNATSPEED\n");
+//    //rtos::ThisThread::sleep_for(3000);
 
     return _at->unlock_return_error();
 }

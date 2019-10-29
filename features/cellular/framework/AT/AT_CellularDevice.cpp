@@ -635,3 +635,42 @@ nsapi_error_t AT_CellularDevice::clear()
 
     return err;
 }
+
+nsapi_error_t AT_CellularDevice::set_baud_rate(int baud_rate)
+{
+    int current_baud_rate = -1;
+
+    nsapi_error_t error = get_baud_rate(current_baud_rate);
+
+    if (error != NSAPI_ERROR_OK || current_baud_rate == baud_rate) {
+        return error;
+    }
+
+    error = set_baud_rate_impl(baud_rate);
+    if (error) {
+        return error;
+    }
+
+    _at->set_baud(baud_rate);
+
+    // Give some time before starting using the UART with the new baud rate
+    rtos::ThisThread::sleep_for(3000);
+
+    error = get_baud_rate(current_baud_rate);
+
+    if (current_baud_rate != baud_rate) {
+       tr_warning("Baudrate was not changed to desired value: %d", baud_rate);
+    }
+
+    return error;
+}
+
+nsapi_error_t AT_CellularDevice::set_baud_rate_impl(int baud_rate)
+{
+    return _at->at_cmd_discard("+IPR", "=", "%d", baud_rate);
+}
+
+nsapi_error_t AT_CellularDevice::get_baud_rate(int &baud_rate)
+{
+    return _at->at_cmd_int("+IPR", "?", baud_rate);
+}

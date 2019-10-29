@@ -1597,3 +1597,8 @@ void ATHandler::set_send_delay(uint16_t send_delay)
 {
     _at_send_delay = send_delay;
 }
+
+void ATHandler::set_baud(int baud_rate)
+{
+    static_cast<UARTSerial *>(_fileHandle)->set_baud(baud_rate);
+}

@@ -176,6 +176,15 @@ public:
     {
         return NSAPI_ERROR_OK;
     }
+    nsapi_error_t set_baud_rate(int baud_rate)
+    {
+        return NSAPI_ERROR_OK;
+    }
+
+    nsapi_error_t get_baud_rate(int &baud_rate)
+    {
+        return NSAPI_ERROR_OK;
+    }
 
     void verify_timeout_array(const uint16_t timeout[], int array_len)
     {
